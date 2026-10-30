@@ -45,8 +45,30 @@ behaviour: presort, name chain, year, title, volume, `sortkey` as a final tiebre
 - Spike 002 (names and sort): VALIDATED, 171 people, 0 empty family names, particles
   correct.
 - Spike 003 (order against biber): VALIDATED at 92/92 for three schemes.
-- Not done yet: `sort` output is not normalised (fields are copied as written), there are
-  no CLI contract tests, no README, no CI, nothing committed to git.
+## Normalisation, 30 October 2026
+
+`sort --normalise` now rewrites fields the way biber does: `year` to `date`, `journal` to
+`journaltitle`, `origyear` to `origdate`, `address` to `location`, `annote` to `annotation`,
+`archiveprefix` to `eprinttype`, `key` to `sortkey`, `pdf` to `file`, `primaryclass` to
+`eprintclass`, `school` to `institution`. Values get whitespace collapsed, and page ranges
+are re-punctuated (`55-65` to `55--65`, en dash to `--`, no space after a comma).
+
+Field sets now match `biber --tool` for 92 of 92 entries. Four things were learned by
+measurement, and one of them is a design difference rather than a gap:
+
+| Finding | Consequence |
+|---|---|
+| `biber --tool` deletes `sorttitle`, `sortname`, `sortyear`, `presort` | Feeding biber's own `--tool` output back through biblatex reorders the bibliography. We keep those fields: a sorter must not delete the fields that decide the order. |
+| `label` is kept by biber | It was in our computed/dropped list; measured, it is not. |
+| A value that is one abbreviation is written bare (`JOURNALTITLE = JOMCH`), a mixed one is braced | Writing `PUBLISHER = dtv and Walter de Gruyter` bare made biber report `found "and", expected end of entry`. Found by feeding our output back to biber. |
+| `entryset` is dropped by `biber --tool`, leaving a `@set` with no members | Kept; biber then warns "Set entry has no entryset field". |
+
+Known, documented difference: LaTeX escapes are preserved as written (`{\"O}` stays) where
+biber decodes them to UTF-8 (`Ö`). Decoding TeX is an encoding policy with a large surface,
+and preserving what the author wrote diffs cleanly in git.
+
+Tests now: 14 (7 CLI contract, 4 normalisation, 3 order oracle). Both modes round-trip
+through real biber with zero errors or warnings and an identical order.
 
 ## Files
 

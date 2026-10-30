@@ -14,7 +14,8 @@ One static binary. No network, no TeX Live, no biber, no runtime.
 | Command | What it does |
 |---|---|
 | `bibsmith sort <file>` | Sort the database and write it out (`--scheme nyt`, `-o out.bib`) |
-| `bibsmith check <file>` | Report the fields biber would rename or drop, change nothing |
+| `--normalise` | Rename legacy fields the way biber does (`year` to `date`, `journal` to `journaltitle`, `origyear` to `origdate`) |
+| `bibsmith check <file>` | Report what normalising would change, and change nothing |
 | `--scheme` | `nyt`, `nty` or `ynt`, exactly as biblatex names them |
 
 `sort` reads `@string` definitions and every entry type biblatex knows, and writes the same
@@ -30,6 +31,8 @@ Every number below is a test in this repository, not a claim.
 | Order matches biber, `nyt` | 92 of 92 positions |
 | Order matches biber, `nty` | 92 of 92 positions |
 | Order matches biber, `ynt` | 92 of 92 positions |
+| Normalised fields match `biber --tool` | 92 of 92 entries |
+| Our output fed back to biber | 0 errors, 0 warnings, identical order |
 | Parse round-trip on the canonical corpus | 92 of 92 entries, 0 lost fields |
 
 The corpus is `biblatex-examples.bib` from CTAN, the file the biblatex manual is built
@@ -60,8 +63,12 @@ Each was found by measuring a mismatch against biber, then confirming the rule i
 - **No disambiguation.** `uniquename`, `uniquelist` and the `a`/`b` suffixes biblatex adds
   when two works share an author-year are not implemented.
 - **No remote lookups.** No DOI, ISBN or PubMed queries.
-- **No field normalisation in `sort` yet.** Fields are written as they were read; `check`
-  only reports what biber would change.
+- **LaTeX escapes are preserved, not decoded.** `{\"O}` stays `{\"O}`; `biber --tool`
+  rewrites it to `Ö`. Same meaning, different bytes, and the one place a diff against
+  biber's own rewrite shows anything on a file without other differences.
+- **`--normalise` keeps `sorttitle`, `sortname`, `sortyear` and `presort`,** which
+  `biber --tool` deletes. Those fields decide the order, and biber's own `--tool` output
+  demonstrably reorders a bibliography when fed back through biblatex.
 - **Three schemes.** `nyt`, `nty` and `ynt` are the ones with oracle tests. `nyvt`, `ydnt`
   and user-declared templates are not implemented, and asking for one is an error rather
   than a silent fallback to a different order.

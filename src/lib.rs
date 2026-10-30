@@ -12,7 +12,7 @@
 pub mod normalize;
 pub mod sort;
 
-pub use normalize::normalise_entry;
+pub use normalize::{RawNormalised, normalise_all, normalise_raw, write_raw};
 pub use sort::{Parts, Scheme, parts as sort_parts, sort_entries};
 
 /// Parse a scheme name, or explain which ones exist. The CLI calls this so a typo
