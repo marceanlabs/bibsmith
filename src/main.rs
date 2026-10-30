@@ -51,7 +51,16 @@ fn run(cli: Cli) -> Result<(), String> {
             let scheme = scheme_or_default(&scheme)?;
             let entries: Vec<&biblatex::Entry> = db.iter().collect();
             let ordered = bibsmith::sort_entries(&entries, scheme);
-            let text: String = ordered.iter().map(|e| e.to_biblatex_string()).collect();
+            // `@string` definitions come first, as biber writes them: entries may
+            // refer to them by name, and a reader that resolves macros needs them.
+            let mut text = String::new();
+            for block in db.string_blocks() {
+                text.push_str(block);
+                text.push('\n');
+            }
+            for entry in ordered {
+                text.push_str(&entry.to_biblatex_string());
+            }
             match out {
                 Some(path) => {
                     std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?
