@@ -1,0 +1,11 @@
+/target
+/oracle/*.aux
+/oracle/*.bbl
+/oracle/*.bcf
+/oracle/*.blg
+/oracle/*.log
+/oracle/*.pdf
+/oracle/*.run.xml
+/oracle/*.fdb_latexmk
+/oracle/*.fls
+/spikes/*/target
