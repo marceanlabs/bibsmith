@@ -613,3 +613,24 @@ fn entries_that_share_a_name_are_numbered_in_bibliography_order() {
         assert_eq!(number.as_deref(), Some((i + 1).to_string().as_str()), "{key}");
     }
 }
+
+#[test]
+fn the_index_letter_follows_the_label_name_and_keeps_its_case() {
+    // bibtex files `van Gennep` under `v` when the entry asks for the particle, and under
+    // `B` for `von Brandt` when it does not. The letter is written as it is printed, not
+    // upper-cased: the corpus has a lower-case `v` and biber writes exactly that.
+    let bbl = render(&[("refs.bib", "refs.bib")], "nyt.bcf");
+    let field_of = |key: &str, name: &str| -> Option<String> {
+        bbl.split(&format!("\\entry{{{key}}}"))
+            .nth(1)
+            .and_then(|rest| rest.split("\\endentry").next())
+            .and_then(|body| {
+                body.split(&format!("\\field{{{name}}}{{"))
+                    .nth(1)
+                    .map(|s| s.split('}').next().unwrap().to_string())
+            })
+    };
+    assert_eq!(field_of("vangennep", "sortinit").as_deref(), Some("v"));
+    assert_eq!(field_of("brandt", "sortinit").as_deref(), Some("B"));
+    assert_eq!(field_of("britannica", "sortinit").as_deref(), Some("E"));
+}

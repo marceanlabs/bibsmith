@@ -94,6 +94,99 @@ fn name_hash(people: &[Person]) -> String {
 /// and a `related` copy is not counted at all, because it is not in the list.
 const LABEL_ORDER: &[&str] = &["author", "editor", "translator", "bookauthor"];
 
+/// The letter biblatex files an entry under, one per entry.
+///
+/// The label name comes first and keeps its case — the corpus has `van Gennep`, and biber
+/// writes `v`. `options = {useeditor=false}` has to be honoured, or an entry whose editor
+/// is suppressed indexes under the editor instead of its title. A set has neither name nor
+/// title, so it takes its first member's letter, which is where the reader finds it.
+/// An option that is explicitly turned off: `useeditor=false`.
+fn option_off(options: &str, name: &str) -> bool {
+    options.split(',').any(|part| {
+        part.trim()
+            .split_once('=')
+            .is_some_and(|(key, value)| key.trim() == name && value.trim() == "false")
+    })
+}
+
+/// A biblatex entry option: bare means on, `name=false` means off.
+fn option_on(options: &str, name: &str) -> bool {
+    options.split(',').any(|part| {
+        let part = part.trim();
+        match part.split_once('=') {
+            Some((key, value)) => key.trim() == name && value.trim() != "false",
+            None => part == name,
+        }
+    })
+}
+
+fn sortinits(entries: &[&Effective]) -> std::collections::HashMap<String, String> {
+    let mut out: std::collections::HashMap<String, String> = Default::default();
+    for entry in entries {
+        let options = entry
+            .values
+            .iter()
+            .find(|(k, _)| k == "options")
+            .map(|(_, v)| v.to_lowercase())
+            .unwrap_or_default();
+        let name = entry.names.iter().find(|(field, people)| {
+            if people.is_empty() || !LABEL_ORDER.contains(&field.as_str()) {
+                return false;
+            }
+            // `useauthor` and `useeditor` are on unless the entry turns them off;
+            // `usetranslator` is off unless the entry turns it on.
+            match field.as_str() {
+                "author" | "editor" => !option_off(&options, &format!("use{field}")),
+                "translator" => option_on(&options, "usetranslator"),
+                _ => true,
+            }
+        });
+        let source = name
+            .and_then(|(_, people)| people.first())
+            // The particle is only part of the label when the entry asks for it:
+            // `options = {useprefix}` files `van Gennep` under `v`, while the default
+            // drops it and files `von Brandt` under `B`.
+            .map(|p| match p.prefix.is_empty() || !option_on(&options, "useprefix") {
+                true => p.name.clone(),
+                false => format!("{} {}", p.prefix, p.name),
+            })
+            .or_else(|| {
+                entry
+                    .values
+                    .iter()
+                    .find(|(k, _)| k == "key" || k == "sortkey")
+                    .map(|(_, v)| v.clone())
+                    .filter(|v| !v.trim().is_empty())
+            })
+            .or_else(|| {
+                entry
+                    .values
+                    .iter()
+                    .find(|(k, _)| k == "sorttitle")
+                    .or_else(|| entry.values.iter().find(|(k, _)| k == "title"))
+                    .map(|(_, v)| v.clone())
+            })
+            .unwrap_or_default();
+        let initial = source
+            .chars()
+            .find(|c| c.is_alphanumeric())
+            .map(|c| c.to_string())
+            .unwrap_or_default();
+        out.insert(entry.key.clone(), initial);
+    }
+    for entry in entries {
+        if out.get(&entry.key).is_some_and(|s| !s.is_empty()) {
+            continue;
+        }
+        let Some(members) = &entry.entryset else { continue };
+        let Some(first) = members.split(',').next() else { continue };
+        if let Some(initial) = out.get(first.trim()).cloned() {
+            out.insert(entry.key.clone(), initial);
+        }
+    }
+    out
+}
+
 fn name_ranks(entries: &[&Effective]) -> std::collections::HashMap<String, usize> {
     let mut groups: std::collections::HashMap<String, Vec<&str>> = Default::default();
     for entry in entries {
@@ -632,6 +725,7 @@ pub fn write_bbl_scoped(
         // expanded by comparison with the others.
         let levels = uniqueness(ordered);
         let rank = name_ranks(ordered);
+        let ranks_init = sortinits(ordered);
         // The style decides whether a name list is ever extended: `numeric` turns
         // `uniquelist` off, and biber writes no `ul` there at all.
         let lists = if ctl.option("uniquelist") == Some("false") {
@@ -658,6 +752,7 @@ pub fn write_bbl_scoped(
                     labels,
                     &levels,
                     &rank,
+                    &ranks_init,
                     &lists,
                     Some(
                         member_of
@@ -675,7 +770,7 @@ pub fn write_bbl_scoped(
                 continue; // written above
             }
             let inset = if entry.entryset.is_some() { Some("") } else { None };
-            write_entry(&mut out, ctl, entry, extras, labels, &levels, &rank, &lists, inset, "");
+            write_entry(&mut out, ctl, entry, extras, labels, &levels, &rank, &ranks_init, &lists, inset, "");
         }
 
         out.push_str("  \\enddatalist\n");
@@ -694,6 +789,7 @@ fn write_entry(
     labels: &HashMap<String, (String, Option<u8>)>,
     levels: &std::collections::HashMap<(String, String, String), u8>,
     rank: &std::collections::HashMap<String, usize>,
+    ranks_init: &std::collections::HashMap<String, String>,
     lists: &std::collections::HashMap<String, usize>,
     inset: Option<&str>,
     options: &str,
@@ -753,38 +849,12 @@ fn write_entry(
         }
     }
 
-    // The first-letter index comes from the label name, and only falls back to the
-    // title when there is no name: biber puts "W" for Weinberg under "A Model of
-    // Leptons".
-    let index_source = entry
-        .names
-        .iter()
-        .find(|(field, _)| *field == label_source)
-        .and_then(|(_, people)| people.first())
-        .map(|p| p.name.clone())
-        // An entry filed by its legacy `key` indexes under that key, not its title.
-        .or_else(|| {
-            entry
-                .values
-                .iter()
-                .find(|(k, _)| k == "key" || k == "sortkey")
-                .map(|(_, v)| v.clone())
-                .filter(|v| !v.trim().is_empty())
-        })
-        .or_else(|| {
-            entry
-                .values
-                .iter()
-                .find(|(k, _)| k == "sorttitle")
-                .or_else(|| entry.values.iter().find(|(k, _)| k == "title"))
-                .map(|(_, v)| v.clone())
-        })
-        .unwrap_or_default();
-    let sortinit = index_source
-        .chars()
-        .find(|c| c.is_alphanumeric())
-        .map(|c| c.to_uppercase().to_string())
-        .unwrap_or_default();
+    let sortinit = ranks_init.get(entry.key.as_str()).cloned().unwrap_or_default();
+    // A `related` copy says which entry it is a copy of; biblatex uses that to print the
+    // copy's own citation without treating it as a separate work.
+    if entry.data_key.is_some() {
+        field(out, "clonesourcekey", &entry.key);
+    }
     // `uniquename`: each entry whose label name is shared with another is numbered in
     // bibliography order, and biblatex uses the number to decide whether to add initials.
     // Entries whose name is their own are left without the field.
@@ -815,10 +885,18 @@ fn write_entry(
         if SKIP_FIELDS.contains(&key.as_str()) || NAME_FIELDS.contains(&key.as_str()) {
             continue;
         }
-        if crate::normalize::renamed_field(key).is_some_and(|target| spelled.contains(target)) {
+        // `origyear` is a field in its own right, not a stray spelling of `origdate`:
+        // biblatex reads it, and biber writes both it and `year`.
+        let legacy_part = matches!(key.as_str(), "origyear" | "origmonth" | "origday");
+        if !legacy_part
+            && crate::normalize::renamed_field(key).is_some_and(|target| spelled.contains(target))
+        {
             continue;
         }
-        let target = crate::normalize::renamed_field(key).unwrap_or(key.as_str());
+        let target = match legacy_part {
+            true => key.as_str(),
+            false => crate::normalize::renamed_field(key).unwrap_or(key.as_str()),
+        };
         // `key` is renamed to `sortkey`, which is a sort control: biblatex never reads it.
         if SKIP_FIELDS.contains(&target) {
             continue;
