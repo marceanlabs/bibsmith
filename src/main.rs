@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use bibsmith::{
     ControlFile, Database, disambiguate, normalise_all, scheme_or_default, sort_entries,
-    suffix_for, write_bbl_scoped, write_raw,
+    normalise_all_with, suffix_for, write_bbl_scoped, write_raw,
 };
 use clap::{Parser, Subcommand};
 
@@ -106,8 +106,8 @@ fn run(cli: Cli) -> Result<(), String> {
                 text.push_str(block);
                 text.push('\n');
             }
-            if normalise {
-                let mut by_key: HashMap<String, _> = normalise_all(&src)
+            {
+                let mut by_key: HashMap<String, _> = normalise_all_with(&src, normalise)
                     .map_err(|e| format!("{}: {e}", file.display()))?
                     .into_iter()
                     .map(|n| (n.key.clone(), n))
@@ -124,15 +124,6 @@ fn run(cli: Cli) -> Result<(), String> {
                                 entry.key
                             ));
                         }
-                    }
-                }
-            } else {
-                for entry in ordered {
-                    text.push_str(&entry.to_biblatex_string());
-                    // `to_biblatex_string` does not always end with a newline, and two
-                    // entries joined on one line is a file nobody can diff.
-                    if !text.ends_with('\n') {
-                        text.push('\n');
                     }
                 }
             }

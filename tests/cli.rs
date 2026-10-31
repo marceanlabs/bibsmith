@@ -178,3 +178,27 @@ fn check_reports_and_changes_nothing() {
         "the rename must be shown: {report}"
     );
 }
+
+#[test]
+fn sorting_does_not_escape_the_authors_tex() {
+    // The library's own writer escapes braces and backslashes to make a safe file, which
+    // turns `\emph{y}` into `\\emph\{y\}` and `100%` into `100\%`: biblatex prints those
+    // literally, so a database written that way no longer says what it said.
+    let path = scratch("escape.bib");
+    std::fs::write(
+        &path,
+        "@misc{k, author = {A, B}, title = {T}, year = {2000}, note = {A \\emph{y} and 100% sure}}\n",
+    )
+    .unwrap();
+    let out = Command::new(bin())
+        .arg("sort")
+        .arg(&path)
+        .arg("--scheme")
+        .arg("nyt")
+        .output()
+        .expect("run");
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("\\emph{y}"), "the command must be written as the author wrote it: {text}");
+    assert!(text.contains("100% sure"), "a percent sign is not an escape: {text}");
+    assert!(!text.contains("\\{y\\}"));
+}

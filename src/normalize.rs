@@ -165,17 +165,31 @@ fn render(value: &[Spanned<RawChunk<'_>>]) -> (String, bool) {
 }
 
 pub fn normalise_raw(entry: &RawEntry<'_>) -> RawNormalised {
+    normalise_raw_with(entry, true)
+}
+
+/// `rename = false` keeps the author's own field names.
+///
+/// The default `sort` must not rename anything: `to_biblatex_string` escapes braces and
+/// backslashes to make a *safe* file, which turns `\emph{y}` into `\\\\emph\\{y\\}` and
+/// `100%` into `100\%`. biblatex reads those literally, so a database that has been
+/// through that writer no longer means what it said.
+pub fn normalise_raw_with(entry: &RawEntry<'_>, rename: bool) -> RawNormalised {
     let mut fields: Vec<(String, String, bool)> = Vec::new();
     let mut renamed: Vec<(String, String)> = Vec::new();
     let mut dropped: Vec<String> = Vec::new();
 
     for pair in &entry.fields {
         let original = pair.key.v.to_ascii_lowercase();
-        let target = RENAMES
-            .iter()
-            .find(|(from, _)| *from == original)
-            .map(|(_, to)| (*to).to_string())
-            .unwrap_or_else(|| original.clone());
+        let target = if rename {
+            RENAMES
+                .iter()
+                .find(|(from, _)| *from == original)
+                .map(|(_, to)| (*to).to_string())
+                .unwrap_or_else(|| original.clone())
+        } else {
+            original.clone()
+        };
         // A rename must not collide with a field already present under the modern
         // name; the modern one wins and the legacy one is reported.
         if fields.iter().any(|(k, _, _)| *k == target) {
@@ -275,8 +289,16 @@ pub fn raw_entries(src: &str) -> Result<Vec<RawEntryView>, biblatex::ParseError>
 
 /// The whole database, normalised, in source order.
 pub fn normalise_all(src: &str) -> Result<Vec<RawNormalised>, biblatex::ParseError> {
+    normalise_all_with(src, true)
+}
+
+pub fn normalise_all_with(src: &str, rename: bool) -> Result<Vec<RawNormalised>, biblatex::ParseError> {
     let raw = RawBibliography::parse(src)?;
-    Ok(raw.entries.iter().map(|e| normalise_raw(&e.v)).collect())
+    Ok(raw
+        .entries
+        .iter()
+        .map(|e| normalise_raw_with(&e.v, rename))
+        .collect())
 }
 
 /// Render a field value for the `.bbl`, keeping the braces the author wrote.

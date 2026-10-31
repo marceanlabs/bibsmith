@@ -21,7 +21,9 @@ pub mod sort;
 pub use bbl::{write_bbl, write_bbl_scoped, write_bbl_sections};
 pub use bcf::ControlFile;
 pub use disambiguate::{disambiguate, suffix_for};
-pub use normalize::{RawNormalised, normalise_all, normalise_raw, write_raw};
+pub use normalize::{
+    RawNormalised, normalise_all, normalise_all_with, normalise_raw, write_raw,
+};
 pub use sort::{Parts, Scheme, parts as sort_parts, sort_entries};
 
 /// Parse a scheme name, or explain which ones exist. The CLI calls this so a typo
