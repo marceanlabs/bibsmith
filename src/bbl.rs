@@ -87,6 +87,46 @@ fn name_hash(people: &[Person]) -> String {
     format!("{:x}", md5::compute(canonical.as_bytes()))
 }
 
+/// biblatex's `extraname`: the position of an entry among those whose label name is the
+/// same, in bibliography order, counting from one.
+///
+/// Measured on the corpus: four Aristotle texts number 1 to 4, seven Knuth volumes 1 to 7,
+/// and a `related` copy is not counted at all, because it is not in the list.
+const LABEL_ORDER: &[&str] = &["author", "editor", "translator", "bookauthor"];
+
+fn name_ranks(entries: &[&Effective]) -> std::collections::HashMap<String, usize> {
+    let mut groups: std::collections::HashMap<String, Vec<&str>> = Default::default();
+    for entry in entries {
+        if entry.data_key.is_some() {
+            continue;
+        }
+        let Some(label) = entry
+            .names
+            .iter()
+            .find(|(field, people)| !people.is_empty() && LABEL_ORDER.contains(&field.as_str()))
+            .map(|(_, people)| people)
+        else {
+            continue;
+        };
+        let key: String = label
+            .iter()
+            .map(|p| format!("{}|{}", p.name.to_lowercase(), p.given_name.to_lowercase()))
+            .collect::<Vec<_>>()
+            .join(";");
+        groups.entry(key).or_default().push(entry.key.as_str());
+    }
+    let mut ranks = std::collections::HashMap::new();
+    for (_, keys) in groups {
+        if keys.len() < 2 {
+            continue;
+        }
+        for (i, key) in keys.iter().enumerate() {
+            ranks.insert((*key).to_string(), i + 1);
+        }
+    }
+    ranks
+}
+
 /// biblatex's `uniquename`, as a level per name.
 ///
 /// 0 when the family name is enough, 1 when initials separate the names, 2 when the whole
@@ -310,7 +350,6 @@ fn name_block(
         }
         // No blank line here: `\name` scans its argument, and a blank line is a `\par`,
         // which ends the scan and spills the rest of the attributes onto the page.
-        out.push_str(&format!("           givenun={level}"));
         out.push_str("}}%");
         if i + 1 < people.len() {
             out.push('\n');
@@ -592,6 +631,7 @@ pub fn write_bbl_scoped(
         // Uniqueness is a property of the whole bibliography: a name is only shortened or
         // expanded by comparison with the others.
         let levels = uniqueness(ordered);
+        let rank = name_ranks(ordered);
         // The style decides whether a name list is ever extended: `numeric` turns
         // `uniquelist` off, and biber writes no `ul` there at all.
         let lists = if ctl.option("uniquelist") == Some("false") {
@@ -617,6 +657,7 @@ pub fn write_bbl_scoped(
                     extras,
                     labels,
                     &levels,
+                    &rank,
                     &lists,
                     Some(
                         member_of
@@ -634,7 +675,7 @@ pub fn write_bbl_scoped(
                 continue; // written above
             }
             let inset = if entry.entryset.is_some() { Some("") } else { None };
-            write_entry(&mut out, ctl, entry, extras, labels, &levels, &lists, inset, "");
+            write_entry(&mut out, ctl, entry, extras, labels, &levels, &rank, &lists, inset, "");
         }
 
         out.push_str("  \\enddatalist\n");
@@ -652,6 +693,7 @@ fn write_entry(
     extras: &HashMap<String, u8>,
     labels: &HashMap<String, (String, Option<u8>)>,
     levels: &std::collections::HashMap<(String, String, String), u8>,
+    rank: &std::collections::HashMap<String, usize>,
     lists: &std::collections::HashMap<String, usize>,
     inset: Option<&str>,
     options: &str,
@@ -743,8 +785,21 @@ fn write_entry(
         .find(|c| c.is_alphanumeric())
         .map(|c| c.to_uppercase().to_string())
         .unwrap_or_default();
+    // `uniquename`: each entry whose label name is shared with another is numbered in
+    // bibliography order, and biblatex uses the number to decide whether to add initials.
+    // Entries whose name is their own are left without the field.
+    match rank.get(entry.key.as_str()) {
+        // A `related` copy is written under its hash and is not in the list, so it carries
+        // no rank: biber leaves the field off the copies too.
+        Some(n) if *n > 0 && entry.data_key.is_none() => field(out, "extraname", &n.to_string()),
+        _ => {}
+    }
     if !sortinit.is_empty() {
         field(out, "sortinit", &sortinit);
+        // biber writes the hash of the sortinit as well; biblatex uses it to tell one
+        // initial group from another without comparing the letters.
+        let digest = format!("{:x}", md5::compute(sortinit.as_bytes()));
+        field(out, "sortinithash", &digest);
     }
 
     // Values are the macro-expanded ones: a corpus entry that says

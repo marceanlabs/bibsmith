@@ -586,3 +586,30 @@ fn a_related_entry_is_written_under_its_hash_and_left_out_of_the_list() {
     assert!(bbl.contains(&format!("\\entry{{{hash}}}{{misc}}{{skipbib=true")), "written under its hash, out of the list");
     assert!(bbl.contains(&format!("\\field{{related}}{{{hash}}}")), "the parent points at that hash");
 }
+
+#[test]
+fn entries_that_share_a_name_are_numbered_in_bibliography_order() {
+    // `uniquename` is a number per entry, not a flag: biblatex counts the entries whose
+    // label name is the same and prints enough of the name to tell them apart. Measured
+    // against biber on the corpus, where seven Knuth volumes number 1 to 7 and a related
+    // copy carries nothing.
+    let bbl = render(&[("refs.bib", "refs.bib")], "nyt.bcf");
+    let knuth: Vec<&str> = bbl
+        .lines()
+        .filter(|l| l.contains("\\entry{knuth:ct"))
+        .collect();
+    assert!(knuth.len() >= 7, "{knuth:?}");
+    for (i, line) in knuth.iter().take(7).enumerate() {
+        let key = line.split('{').nth(1).unwrap().split('}').next().unwrap();
+        let number = bbl
+            .split(&format!("\\entry{{{key}}}"))
+            .nth(1)
+            .and_then(|rest| rest.split("\\endentry").next())
+            .and_then(|body| {
+                body.split("\\field{extraname}{")
+                    .nth(1)
+                    .map(|s| s.split('}').next().unwrap().to_string())
+            });
+        assert_eq!(number.as_deref(), Some((i + 1).to_string().as_str()), "{key}");
+    }
+}
