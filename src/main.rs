@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use bibsmith::{
     ControlFile, Database, disambiguate, normalise_all, scheme_or_default, sort_entries,
-    suffix_for, write_bbl, write_bbl_scoped, write_raw,
+    suffix_for, write_bbl_scoped, write_raw,
 };
 use clap::{Parser, Subcommand};
 
@@ -195,7 +195,6 @@ fn run(cli: Cli) -> Result<(), String> {
             };
             let cited: Vec<&biblatex::Entry> = citekeys.iter().filter_map(|k| db.get(k)).collect();
             let ordered = sort_entries(&cited, scheme);
-            let extras = disambiguate(&ordered, scheme);
 
             // `crossref` last: a chapter's book title and editor live on the parent, and
             // without them the entry prints with no book at all.

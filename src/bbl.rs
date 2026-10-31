@@ -217,21 +217,6 @@ fn uniquelist(entries: &[&Effective], maxnames: usize) -> std::collections::Hash
     out
 }
 
-/// The year a label would show, as a group key.
-fn label_year(entry: &Effective) -> String {
-    let value = |name: &str| {
-        entry
-            .values
-            .iter()
-            .find(|(k, _)| k == name)
-            .map(|(_, v)| v.clone())
-    };
-    if let Some(date) = value("date") {
-        return date.chars().take(4).collect();
-    }
-    value("year").unwrap_or_default()
-}
-
 fn name_block(
     field_name: &str,
     people: &[Person],
