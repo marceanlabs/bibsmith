@@ -43,7 +43,7 @@ const RENAMES: &[(&str, &str)] = &[
 const COMPUTED: &[&str] = &[];
 
 /// Fields whose value biber re-punctuates as a numeric range.
-const RANGES: &[&str] = &["pages", "pageref", "pagetotal"];
+pub const RANGES: &[&str] = &["pages", "pageref", "pagetotal"];
 
 /// What biber calls this field, if it renames it.
 ///
@@ -173,10 +173,6 @@ pub fn normalise_raw(entry: &RawEntry<'_>) -> RawNormalised {
 
     for pair in &entry.fields {
         let original = pair.key.v.to_ascii_lowercase();
-        if COMPUTED.contains(&original.as_str()) {
-            dropped.push(original);
-            continue;
-        }
         let target = RENAMES
             .iter()
             .find(|(from, _)| *from == original)
@@ -243,13 +239,6 @@ pub fn write_raw(entry: &RawNormalised) -> String {
 ///
 /// The `.bbl` writer needs this rather than the resolved values: biblatex prints
 /// what the author wrote, and `{\TeX}` decoded to `TeX` prints differently.
-pub fn raw_values(src: &str) -> Result<Vec<KeyedFields>, biblatex::ParseError> {
-    Ok(raw_entries(src)?
-        .into_iter()
-        .map(|e| (e.key, e.fields))
-        .collect())
-}
-
 /// A citation key and the fields written for it.
 pub type KeyedFields = (String, Vec<(String, String)>);
 

@@ -44,9 +44,6 @@ const SKIP_FIELDS: &[&str] = &[
     "origdate",
 ];
 
-/// Fields whose value biblatex prints as a range, with the dash re-punctuated.
-const RANGES: &[&str] = &["pages", "pageref", "pagetotal"];
-
 /// Initials in biblatex's notation: one letter per word, separated by
 /// `\bibinitdelim`, each followed by `\bibinitperiod`.
 fn initials(text: &str, period: &str) -> String {
@@ -426,7 +423,7 @@ fn write_entry(
             continue;
         }
         let target = crate::normalize::renamed_field(key).unwrap_or(key.as_str());
-        let value = if RANGES.contains(&key.as_str()) {
+        let value = if crate::normalize::RANGES.contains(&key.as_str()) {
             // biblatex prints ranges with its own macro, not a literal dash.
             crate::normalize::normalise_range(value).replace("--", "\\bibrangedash ")
         } else {

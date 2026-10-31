@@ -33,10 +33,6 @@ fn plain(text: &str) -> Vec<char> {
 /// behaviour is biblatex's: one name takes three characters, two or three names take
 /// one character each, and more than three names take three characters from the first
 /// and a plus sign.
-pub fn label_alpha(entry: &Effective, year_width: usize) -> String {
-    label_alpha_with(entry, year_width, None)
-}
-
 /// Build the label, following a `@set` to its first member: biblatex labels a set the
 /// way it labels the item that opens it.
 pub fn label_alpha_with(
