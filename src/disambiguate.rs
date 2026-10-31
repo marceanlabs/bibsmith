@@ -41,11 +41,14 @@ fn label_names(entry: &Entry) -> String {
             .unwrap_or_default()
             .to_lowercase();
     }
+    // The given name is part of the label once biblatex has expanded it to tell two
+    // people apart, so two entries by `Smith, John` and `Smith, Jane` do not collide and
+    // need no 2020a/2020b. Two entries by the same `Smith, John` still do.
     names
         .iter()
-        .map(|p| p.name.to_lowercase())
+        .map(|p| format!("{}\u{1}{}", p.name.to_lowercase(), p.given_name.to_lowercase()))
         .collect::<Vec<_>>()
-        .join("\u{1}")
+        .join("\u{2}")
 }
 
 /// The label year.

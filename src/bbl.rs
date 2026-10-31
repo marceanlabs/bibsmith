@@ -87,15 +87,65 @@ fn name_hash(people: &[Person]) -> String {
     format!("{:x}", md5::compute(canonical.as_bytes()))
 }
 
-fn name_block(field_name: &str, people: &[Person]) -> String {
+/// biblatex's `uniquename`, as a level per name.
+///
+/// 0 when the family name is enough, 1 when initials separate the names, 2 when the whole
+/// given name is needed. Measured on a file with Smith/John, Smith/Jane and Smith/John A.:
+/// biber gives the first two 2 and the third 1, because `J.` collides but `J. A.` does not.
+fn uniqueness(entries: &[&Effective]) -> std::collections::HashMap<(String, String), u8> {
+    let mut families: std::collections::HashMap<String, std::collections::HashSet<String>> =
+        Default::default();
+    for entry in entries {
+        for (_, people) in &entry.names {
+            for p in people {
+                families
+                    .entry(p.name.to_lowercase())
+                    .or_default()
+                    .insert(p.given_name.to_lowercase());
+            }
+        }
+    }
+    let mut levels = std::collections::HashMap::new();
+    for (family, people) in &families {
+        for given in people {
+            let level = if people.len() == 1 {
+                0
+            } else {
+                let mine = initials(given, "");
+                let shared = people
+                    .iter()
+                    .filter(|other| initials(other, "") == mine)
+                    .count();
+                if shared == 1 {
+                    1
+                } else {
+                    2
+                }
+            };
+            levels.insert((family.clone(), given.clone()), level);
+        }
+    }
+    levels
+}
+
+fn name_block(
+    field_name: &str,
+    people: &[Person],
+    levels: &std::collections::HashMap<(String, String), u8>,
+) -> String {
     let mut out = String::new();
     out.push_str(&format!(
         "      \\name{{{field_name}}}{{{}}}{{}}{{%\n",
         people.len()
     ));
     for (i, p) in people.iter().enumerate() {
+        let level = levels
+            .get(&(p.name.to_lowercase(), p.given_name.to_lowercase()))
+            .copied()
+            .unwrap_or(0);
+        let part = if level == 0 { "base" } else { "given" };
         out.push_str(&format!(
-            "        {{{{un=0,uniquepart=base,hash={}}}{{%\n",
+            "        {{{{un={level},uniquepart={part},hash={}}}{{%\n",
             name_hash(std::slice::from_ref(p))
         ));
         if !p.prefix.is_empty() {
@@ -121,7 +171,10 @@ fn name_block(field_name: &str, people: &[Person]) -> String {
         if !p.suffix.is_empty() {
             out.push_str(&format!("           suffix={{{}}},\n", p.suffix));
         }
-        out.push_str("           givenun=0}}%");
+        // No blank line here: `\name` scans its argument, and a blank line is a `\par`,
+        // which ends the scan and spills the rest of the attributes onto the page.
+        out.push_str(&format!("           givenun={level}"));
+        out.push_str("}}%");
         if i + 1 < people.len() {
             out.push('\n');
         }
@@ -235,13 +288,6 @@ fn month_number(month: &str) -> Option<u8> {
         .map(|i| i as u8 + 1)
 }
 
-fn strip_leading_zero(s: &str) -> String {
-    match s.parse::<u32>() {
-        Ok(n) => n.to_string(),
-        Err(_) => s.to_string(),
-    }
-}
-
 /// The parts biblatex wants instead of a date: `2024-03-09` becomes year 2024, month 3,
 /// day 9, under the field's own prefix (`urldate` gives urlyear and friends).
 ///
@@ -353,6 +399,10 @@ pub fn write_bbl(
         }
     }
 
+    // Uniqueness is a property of the whole bibliography: a name is only shortened or
+    // expanded by comparison with the others.
+    let levels = uniqueness(ordered);
+
     let mut out = String::new();
     out.push_str("% $ biblatex auxiliary file $\n");
     out.push_str("% $ biblatex bbl format version 3.3 $\n");
@@ -383,6 +433,7 @@ pub fn write_bbl(
                 entry,
                 extras,
                 labels,
+                &levels,
                 Some(
                     member_of
                         .get(entry.key.as_str())
@@ -403,7 +454,7 @@ pub fn write_bbl(
         } else {
             None
         };
-        write_entry(&mut out, ctl, entry, extras, labels, inset, "");
+        write_entry(&mut out, ctl, entry, extras, labels, &levels, inset, "");
     }
 
     out.push_str("  \\enddatalist\n");
@@ -419,6 +470,7 @@ fn write_entry(
     entry: &Effective,
     extras: &HashMap<String, u8>,
     labels: &HashMap<String, (String, Option<u8>)>,
+    levels: &std::collections::HashMap<(String, String), u8>,
     inset: Option<&str>,
     options: &str,
 ) {
@@ -441,7 +493,7 @@ fn write_entry(
 
     let mut label_source = String::new();
     for (field_name, people) in &entry.names {
-        out.push_str(&name_block(field_name, people));
+        out.push_str(&name_block(field_name, people, levels));
         if label_source.is_empty()
             && matches!(field_name.as_str(), "author" | "editor" | "translator")
         {
