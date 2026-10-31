@@ -209,6 +209,22 @@ fn run(cli: Cli) -> Result<(), String> {
                 .iter()
                 .map(|entry| bibsmith::merge::effective(&db, entry, &raw))
                 .collect();
+            let mut effective = effective;
+            // biber skips an entry whose name list cannot be parsed and carries on: one
+            // bad author in a thousand-entry file must not shift every label after it.
+            // "Werneck,, Renato" is the case that turned up, and it is the difference
+            // between our numbering and biber's on a real ACM file.
+            effective.retain(|entry| match &entry.malformed_name {
+                Some(name) => {
+                    eprintln!(
+                        "WARN - Name {:?} is malformed (consecutive commas): skipping entry {:?}",
+                        name, entry.key
+                    );
+                    false
+                }
+                None => true,
+            });
+
             let by_key: HashMap<&str, &bibsmith::merge::Effective> =
                 effective.iter().map(|e| (e.key.as_str(), e)).collect();
 

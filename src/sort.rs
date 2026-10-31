@@ -152,10 +152,15 @@ fn person_key(p: &Person) -> String {
 fn name_part(entry: &Entry) -> String {
     let names = sort_names(entry);
     if names.is_empty() {
-        // biblatex's own rule, stated in the `biblatex-examples.bib` annotations:
-        // "all entries without an author or editor are alphabetized by title".
-        // Getting this wrong puts every manual and online entry at the front of
-        // the bibliography.
+        // BibTeX's legacy `key` field is what a manual or a web page uses to say where
+        // it should file: `key = {Harvard CodeBlue}` sorts under H. Only when there is
+        // no key does the title decide, which is biblatex's stated rule for entries
+        // without an author or editor.
+        if let Some(key) = plain(entry, "key").or_else(|| plain(entry, "sortkey")) {
+            if !key.trim().is_empty() {
+                return key;
+            }
+        }
         return title_part(entry);
     }
     let mut out = String::new();

@@ -168,10 +168,21 @@ pub struct Effective {
     pub names: Vec<(String, Vec<Person>)>,
     /// The `entryset` link, if this is a `@set` or a member of one.
     pub entryset: Option<String>,
+    /// A name that cannot be parsed, as biber reports it. The entry is then skipped:
+    /// one bad author must not shift every label after it.
+    pub malformed_name: Option<String>,
 }
 
+/// The entry type as biblatex spells it.
+///
+/// A non-standard type such as `@underreview` is an `Unknown` in the parser, and Debug
+/// prints `Unknown("underreview")`, which biblatex cannot resolve: the entry is then
+/// dropped from the list. biber writes the name the author used.
 fn kind_of(entry: &Entry) -> String {
-    format!("{:?}", entry.entry_type).to_ascii_lowercase()
+    match &entry.entry_type {
+        biblatex::EntryType::Unknown(name) => name.to_ascii_lowercase(),
+        other => format!("{other:?}").to_ascii_lowercase(),
+    }
 }
 
 /// Expand one entry into the fields biblatex will see.
@@ -206,6 +217,19 @@ pub fn effective(
     let entryset = entry
         .get("entryset")
         .map(crate::normalize::render_value);
+
+    // Checked on the raw text: the parser quietly accepts `Werneck,, Renato`, and the
+    // double comma is exactly what biber refuses. One bad author must not shift every
+    // label after it, so the entry is skipped rather than written.
+    let malformed_name = raw.get(&entry.key).and_then(|fields| {
+        ["author", "editor", "translator"].iter().find_map(|field| {
+            fields
+                .iter()
+                .find(|(k, _)| k == field)
+                .and_then(|(_, v)| v.split(" and ").find(|name| name.contains(",,")))
+                .map(|name| name.trim().to_string())
+        })
+    });
 
     let mut child_kind = kind_of(entry);
     let mut seen: Vec<String> = vec![entry.key.clone()];
@@ -276,5 +300,6 @@ pub fn effective(
         values,
         names,
         entryset,
+        malformed_name,
     }
 }

@@ -130,8 +130,12 @@ fn name_block(field_name: &str, people: &[Person]) -> String {
     out
 }
 
-/// An `&` in a field value is a column separator to TeX and disappears from the page
-/// unless it is escaped: "Computers & Typesetting" prints as "Computers Typesetting".
+/// Characters that mean something to TeX and must not reach it raw.
+///
+/// `&` is a column separator, so an unescaped one silently disappears from the page.
+/// `%` starts a comment, which is worse: it swallows the closing brace and the whole
+/// document fails with "File ended while scanning use of \field". Both turn up in real
+/// files — a URL with `%3A` in a `source` field was the first one found.
 fn escape_ampersands(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     let mut chars = value.chars().peekable();
@@ -145,6 +149,8 @@ fn escape_ampersands(value: &str) -> String {
         }
         if c == '&' {
             out.push_str("\\&");
+        } else if c == '%' {
+            out.push_str("\\%");
         } else {
             out.push(c);
         }
@@ -189,6 +195,37 @@ fn verb(out: &mut String, name: &str, value: &str) {
     out.push_str("      \\endverb\n");
 }
 
+/// A legacy `month = {January}` reaches biblatex as a name, and a name prints as "jan"
+/// instead of "Jan.". biber converts it to the number; this is the same table.
+fn month_number(month: &str) -> Option<u8> {
+    const NAMES: [&str; 12] = [
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+    ];
+    let cleaned: String = month
+        .chars()
+        .filter(|c| c.is_alphabetic())
+        .collect::<String>()
+        .to_lowercase();
+    if cleaned.is_empty() {
+        return None;
+    }
+    NAMES
+        .iter()
+        .position(|name| name.starts_with(&cleaned) || cleaned.starts_with(name))
+        .map(|i| i as u8 + 1)
+}
+
 fn strip_leading_zero(s: &str) -> String {
     match s.parse::<u32>() {
         Ok(n) => n.to_string(),
@@ -229,7 +266,8 @@ fn write_one_date(out: &mut String, prefix: &str, value: &str) {
     }
     if let Some(month) = parts.next() {
         if !month.is_empty() {
-            field(out, &format!("{prefix}month"), &strip_leading_zero(month));
+            let month = month_number(month).map(|n| n.to_string()).unwrap_or_else(|| strip_leading_zero(month));
+            field(out, &format!("{prefix}month"), &month);
         }
     }
     if let Some(day) = parts.next() {
@@ -397,6 +435,15 @@ fn write_entry(
         .find(|(field, _)| *field == label_source)
         .and_then(|(_, people)| people.first())
         .map(|p| p.name.clone())
+        // An entry filed by its legacy `key` indexes under that key, not its title.
+        .or_else(|| {
+            entry
+                .values
+                .iter()
+                .find(|(k, _)| k == "key" || k == "sortkey")
+                .map(|(_, v)| v.clone())
+                .filter(|v| !v.trim().is_empty())
+        })
         .or_else(|| {
             entry
                 .values
@@ -423,6 +470,10 @@ fn write_entry(
             continue;
         }
         let target = crate::normalize::renamed_field(key).unwrap_or(key.as_str());
+        // `key` is renamed to `sortkey`, which is a sort control: biblatex never reads it.
+        if SKIP_FIELDS.contains(&target) {
+            continue;
+        }
         let value = if crate::normalize::RANGES.contains(&key.as_str()) {
             // biblatex prints ranges with its own macro, not a literal dash.
             crate::normalize::normalise_range(value).replace("--", "\\bibrangedash ")
