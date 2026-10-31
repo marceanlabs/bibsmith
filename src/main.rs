@@ -174,18 +174,34 @@ fn run(cli: Cli) -> Result<(), String> {
             // wants its bibliography sorted, so there is nothing to guess.
             // `anyt` is the alphabetic template: the same name-year-title order, with
             // the label sorted first (handled below).
+            // The named template is read out of the `.bcf` a few lines down, so no name has
+            // to be recognised here. This is only the fallback for a control file that
+            // carries no sorting template at all, and for the two-phase label path, which
+            // needs a first pass to order the entries before their labels exist.
             let scheme = match ctl.sorting_template.as_str() {
                 "nyt" | "anyt" => bibsmith::Scheme::Nyt,
                 "nty" => bibsmith::Scheme::Nty,
                 "ynt" => bibsmith::Scheme::Ynt,
-                other => {
-                    return Err(format!(
-                        "sorting template {other:?} is not implemented; this build knows nyt, nty, ynt and anyt"
-                    ));
-                }
+                _ => bibsmith::Scheme::Nyt,
             };
             let cited: Vec<&biblatex::Entry> = citekeys.iter().filter_map(|k| db.get(k)).collect();
-            let ordered = sort_entries(&cited, scheme);
+            // The order comes from the style's own sorting template, not from a name this
+            // crate happens to implement: a style that asks for `nyvt`, or for a template a
+            // user declared, then sorts correctly without a line of new code. A template
+            // that sorts by a computed field (`labelalpha`) is left to the two-phase path
+            // below, which needs the labels before it can sort on them.
+            let sorts_by_label = ctl.sorts.iter().flat_map(|g| g.items.iter()).any(
+                |item| matches!(item, bibsmith::bcf::SortItem::Field(f) if f == "labelalpha"),
+            );
+            let template = ctl.templates.get(&ctl.sorting_template);
+            let ordered = match (template, sorts_by_label) {
+                (Some(groups), false) => bibsmith::sort::sort_entries_by_template(
+                    &cited,
+                    groups,
+                    &std::collections::HashMap::new(),
+                ),
+                _ => sort_entries(&cited, scheme),
+            };
 
             // `crossref` last: a chapter's book title and editor live on the parent, and
             // without them the entry prints with no book at all.

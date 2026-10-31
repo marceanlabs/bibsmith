@@ -349,3 +349,168 @@ pub fn collated_sort(items: Vec<(String, &Entry)>) -> Vec<&Entry> {
     keyed.sort_by(|a, b| collator.compare(&a.0, &b.0));
     keyed.into_iter().map(|(_, e)| e).collect()
 }
+
+/// One slot of a sort key, resolved from the name the `.bcf` template gives.
+///
+/// The template is the rule, not a hint: `nyt` is `presort`, `sortkey` (final), then the
+/// name chain, the year, the title and the volume. Reading it means a style nobody here has
+/// seen sorts correctly, and the four names this crate used to hard-code stop being a
+/// list of what happens to be implemented.
+fn template_value(
+    entry: &Entry,
+    name: &str,
+    extra: &std::collections::HashMap<String, String>,
+) -> Option<Vec<String>> {
+    // A name field is a list, and biblatex compares it person by person.
+    if matches!(
+        name,
+        "author" | "editor" | "translator" | "bookauthor" | "editora" | "editorb" | "editorc"
+            | "afterword" | "annotator" | "commentator" | "foreword" | "introduction"
+            | "shortauthor" | "shorteditor" | "holder"
+    ) {
+        let opts = NameOptions::from_entry(entry);
+        // `options = {useeditor=false}` is a statement about the label: Britannica must file
+        // under its title, not under the editor it suppresses.
+        let allowed = match name {
+            "author" => opts.use_author,
+            "editor" => opts.use_editor,
+            "translator" => opts.use_translator,
+            _ => true,
+        };
+        if !allowed {
+            return None;
+        }
+        let people = crate::names::names(entry, name);
+        if people.is_empty() {
+            return None;
+        }
+        let keys: Vec<String> = people
+            .iter()
+            .map(|p| {
+                if opts.use_prefix && !p.prefix.is_empty() {
+                    format!("{} {}{SEP}{}{SEP}{}", p.prefix, p.name, p.given_name, p.prefix)
+                } else {
+                    person_key(p)
+                }
+            })
+            .collect();
+        return Some(keys);
+    }
+    if name == "sortname" {
+        let value = plain(entry, "sortname")?;
+        if value.trim().is_empty() {
+            return None;
+        }
+        return Some(vec![value]);
+    }
+    // A date field is compared by its year, and a missing year is an empty slot rather than
+    // the string "0": `volume` is the one field that wants a number.
+    if matches!(name, "year" | "date" | "sortyear" | "origdate" | "eventdate" | "urldate") {
+        // `year` is the old spelling of `date`: biber rewrites one to the other on the way
+        // out, so a template that asks for `year` must find a `date` entry.
+        let raw = match name {
+            "year" => plain(entry, "year").or_else(|| plain(entry, "date")),
+            _ => plain(entry, name),
+        }
+        .unwrap_or_default();
+        let digits: String = raw.chars().take_while(|c| c.is_ascii_digit()).collect();
+        let value = if digits.len() >= 4 {
+            digits[..4].to_string()
+        } else {
+            raw.trim().to_string()
+        };
+        return if value.is_empty() { None } else { Some(vec![value]) };
+    }
+    if let Some(v) = extra.get(name) {
+        return Some(vec![v.clone()]);
+    }
+    let value = plain(entry, name)?;
+    let value = value.trim().to_string();
+    if value.is_empty() {
+        None
+    } else {
+        Some(vec![value])
+    }
+}
+
+/// Entry options that change how a name is read: `useprefix`, `useauthor=false`.
+fn name_options(entry: &Entry, field: &str) -> Option<NameOptions> {
+    if field != "author" && field != "editor" {
+        return None;
+    }
+    Some(NameOptions::from_entry(entry))
+}
+
+/// The parts of one entry's key, read from a `.bcf` sorting template.
+pub fn template_parts(
+    entry: &Entry,
+    groups: &[crate::bcf::SortGroup],
+    extra: &std::collections::HashMap<String, String>,
+    db: &std::collections::HashMap<&str, &Entry>,
+) -> Parts {
+    if let Some(member) = first_set_member(entry, db) {
+        return template_parts(member, groups, extra, db);
+    }
+    let mut parts = Parts::new();
+    for group in groups {
+        let mut chosen: Option<Vec<String>> = None;
+        // BibTeX's legacy `key` names where an entry files when no person does. biblatex
+        // keeps the rule but the template has no slot for it, so it is applied here:
+        // `key = {Harvard CodeBlue}` files under H, not under the title.
+        let names_group = group.items.iter().any(|item| {
+            matches!(item, crate::bcf::SortItem::Field(f) if f == "author" || f == "sortname")
+        });
+        if names_group {
+            if let Some(key) = plain(entry, "key").or_else(|| plain(entry, "sortkey")) {
+                let key = key.trim().to_string();
+                if !key.is_empty() {
+                    chosen = Some(vec![key]);
+                }
+            }
+        }
+        for item in &group.items {
+            if chosen.is_some() {
+                break;
+            }
+            let value = match item {
+                crate::bcf::SortItem::Field(name) => template_value(entry, name, extra),
+                crate::bcf::SortItem::Literal(text) => Some(vec![text.clone()]),
+            };
+            if let Some(v) = value {
+                chosen = Some(v);
+                break;
+            }
+        }
+        // `\sort[final]{\field{sortkey}}`: when it yields a value nothing after it is
+        // compared, which is how a bibliography with `sortkey` fields gets its own order.
+        // An empty `sortkey` is not a value: every entry has one of those.
+        let yielded = chosen.is_some();
+        parts.push(chosen.unwrap_or_else(|| vec![String::new()]));
+        if yielded && group.finalsort {
+            break;
+        }
+    }
+    // Nothing is appended for a tie: biber leaves entries that agree on every slot in
+    // citation order, and adding the key would reorder `kullback:reprint` before
+    // `kullback:related`, which is not what its `.bbl` contains.
+    parts
+}
+
+/// Sort entries by a `.bcf` template. Same collation and stability as the scheme version.
+pub fn sort_entries_by_template<'a>(
+    entries: &[&'a Entry],
+    groups: &[crate::bcf::SortGroup],
+    extra: &std::collections::HashMap<String, String>,
+) -> Vec<&'a Entry> {
+    let db: std::collections::HashMap<&str, &Entry> =
+        entries.iter().map(|e| (e.key.as_str(), *e)).collect();
+    let locale: icu_locale::Locale = "en-US".parse().expect("en-US parses");
+    let collator = Collator::try_new(locale.into(), CollatorOptions::default())
+        .expect("compiled-in collation data");
+    let mut keyed: Vec<(Parts, &Entry)> = entries
+        .iter()
+        .map(|e| (template_parts(e, groups, extra, &db), *e))
+        .collect();
+    keyed.sort_by(|a, b| compare_parts(&collator, &a.0, &b.0));
+    keyed.into_iter().map(|(_, e)| e).collect()
+}
