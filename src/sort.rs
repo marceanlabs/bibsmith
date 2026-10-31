@@ -483,7 +483,10 @@ pub fn template_parts(
         });
         if names_group {
             if let Some(key) = plain(entry, "key").or_else(|| plain(entry, "sortkey")) {
-                let key = key.trim().to_string();
+                // Read as text, not markup: `key = {Kn{\printfirst{v}{1987}}}` files
+                // under "Knv1987", and collating the braces puts it before `Knuth`
+                // because this collator orders symbols before letters.
+                let key = sort_text(key.trim());
                 if !key.is_empty() {
                     chosen = Some(vec![key]);
                 }

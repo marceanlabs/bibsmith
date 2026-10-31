@@ -315,7 +315,12 @@ pub fn effective(
         if seen.contains(&key) {
             break; // a cycle would otherwise spin forever
         }
-        let Some(parent) = db.get(&key) else { break };
+        // The key is matched as written. biber does not find `WHOLE-JOURNAL` when the
+        // entry is `whole-journal`: it warns and leaves the child alone, and inheriting
+        // through a case-insensitive match gives the child a year it never had.
+        let Some(parent) = db.get(&key).filter(|p| p.key == key) else {
+            break;
+        };
         seen.push(key.clone());
 
         let parent_kind = kind_of(parent);
