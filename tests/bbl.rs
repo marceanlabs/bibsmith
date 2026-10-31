@@ -555,3 +555,34 @@ fn a_date_range_numbers_by_its_years_not_its_months() {
     assert_eq!(extras.get("r1"), Some(&1), "the first range takes a");
     assert_eq!(extras.get("r2"), Some(&2), "the second takes b");
 }
+
+#[test]
+fn a_related_entry_is_written_under_its_hash_and_left_out_of_the_list() {
+    // biblatex resolves `related` by looking the hash up in the datalist, so the related
+    // entry has to be there under that hash: without it the "See also" text never prints.
+    let src = String::from(
+        "@misc{main, author = {Main, Mary}, title = {Main Entry}, year = {2000}, related = {other}, relatedstring = {See also}}\n\
+         @misc{other, author = {Oscar, O.}, title = {Related Entry}, year = {2001}}\n",
+    );
+    let db = biblatex::Bibliography::parse(&src).unwrap();
+    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.key, e.fields))
+        .collect();
+    let mut main = bibsmith::merge::effective(&db, db.get("main").unwrap(), &raw);
+    let hash = format!("{:x}", md5::compute(b"other"));
+    main.values
+        .iter_mut()
+        .find(|(k, _)| k == "related")
+        .unwrap()
+        .1 = hash.clone();
+    let mut data = bibsmith::merge::effective(&db, db.get("other").unwrap(), &raw);
+    data.data_key = Some(hash.clone());
+
+    let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
+    let ctl = ControlFile::parse(&xml).unwrap();
+    let bbl = write_bbl(&ctl, &[&main, &data], &HashMap::new(), &HashMap::new());
+    assert!(bbl.contains(&format!("\\entry{{{hash}}}{{misc}}{{skipbib=true")), "written under its hash, out of the list");
+    assert!(bbl.contains(&format!("\\field{{related}}{{{hash}}}")), "the parent points at that hash");
+}

@@ -160,6 +160,9 @@ pub const NAME_FIELDS: &[&str] = &[
 /// One entry with its `crossref` parents folded in.
 #[derive(Debug, Clone)]
 pub struct Effective {
+    /// Set when the entry is written only so a `related` field can be resolved: biblatex
+    /// stores it under this hash rather than under its citekey.
+    pub data_key: Option<String>,
     pub key: String,
     pub kind: String,
     /// Non-name fields, values macro-expanded, in the entry's own order.
@@ -369,6 +372,9 @@ pub fn effective(
     }
 
     Effective {
+        // The key a `related` entry is written under: biblatex looks it up by this string,
+        // not by the citekey, so the parent's `related` field carries it too.
+        data_key: None,
         key: entry.key.clone(),
         kind: kind_of(entry),
         values,

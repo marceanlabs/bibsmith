@@ -224,6 +224,38 @@ fn run(cli: Cli) -> Result<(), String> {
                 None => true,
             });
 
+            // `related = {key}` is written as the *hash* of the related entry, which
+            // biblatex then looks up in the datalist. So every related entry has to be
+            // written too, under that hash and with the options that keep it out of the
+            // list; without it the "See also" text simply does not appear.
+            let mut data_entries: Vec<bibsmith::merge::Effective> = Vec::new();
+            let mut seen_data: std::collections::HashSet<String> = Default::default();
+            for entry in effective.iter_mut() {
+                let Some(slot) = entry.values.iter_mut().find(|(k, _)| k == "related") else {
+                    continue;
+                };
+                let keys: Vec<String> = slot
+                    .1
+                    .split(',')
+                    .map(|k| k.trim().to_string())
+                    .filter(|k| !k.is_empty())
+                    .collect();
+                let mut hashed = Vec::new();
+                for key in keys {
+                    let hash = format!("{:x}", md5::compute(key.as_bytes()));
+                    if seen_data.insert(key.clone()) {
+                        if let Some(related) = db.get(&key) {
+                            let mut data =
+                                bibsmith::merge::effective(&db, related, &raw);
+                            data.data_key = Some(hash.clone());
+                            data_entries.push(data);
+                        }
+                    }
+                    hashed.push(hash);
+                }
+                slot.1 = hashed.join(",");
+            }
+
             let by_key: HashMap<&str, &bibsmith::merge::Effective> =
                 effective.iter().map(|e| (e.key.as_str(), e)).collect();
 
@@ -239,7 +271,10 @@ fn run(cli: Cli) -> Result<(), String> {
 
             let mut labels: HashMap<String, (String, Option<u8>)> = HashMap::new();
             let mut labelled: Vec<(String, &bibsmith::merge::Effective)> = Vec::new();
-            for entry in effective.iter().filter(|e| !member_keys.contains(&e.key)) {
+            for entry in effective
+                .iter()
+                .filter(|e| e.data_key.is_none() && !member_keys.contains(&e.key))
+            {
                 let member = entry
                     .entryset
                     .as_ref()
@@ -311,6 +346,12 @@ fn run(cli: Cli) -> Result<(), String> {
                     .filter(|(_, list): &(String, Vec<&bibsmith::merge::Effective>)| !list.is_empty())
                     .collect()
             };
+            // The `related` entries go last, out of the sorted flow: they exist only to
+            // be looked up by hash.
+            let mut numbered = numbered;
+            if let Some((_, list)) = numbered.first_mut() {
+                list.extend(data_entries.iter());
+            }
             let sections: Vec<(&str, &[&bibsmith::merge::Effective])> = numbered
                 .iter()
                 .map(|(n, v)| (n.as_str(), v.as_slice()))
@@ -318,8 +359,11 @@ fn run(cli: Cli) -> Result<(), String> {
             let extras_by_section: Vec<HashMap<String, u8>> = numbered
                 .iter()
                 .map(|(_, list)| {
-                    let entries: Vec<&biblatex::Entry> =
-                        list.iter().filter_map(|e| db.get(&e.key)).collect();
+                    let entries: Vec<&biblatex::Entry> = list
+                        .iter()
+                        .filter(|e| e.data_key.is_none())
+                        .filter_map(|e| db.get(&e.key))
+                        .collect();
                     disambiguate(&entries, scheme)
                 })
                 .collect();

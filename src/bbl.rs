@@ -92,21 +92,26 @@ fn name_hash(people: &[Person]) -> String {
 /// 0 when the family name is enough, 1 when initials separate the names, 2 when the whole
 /// given name is needed. Measured on a file with Smith/John, Smith/Jane and Smith/John A.:
 /// biber gives the first two 2 and the third 1, because `J.` collides but `J. A.` does not.
-fn uniqueness(entries: &[&Effective]) -> std::collections::HashMap<(String, String), u8> {
-    let mut families: std::collections::HashMap<String, std::collections::HashSet<String>> =
+fn uniqueness(
+    entries: &[&Effective],
+) -> std::collections::HashMap<(String, String, String), u8> {
+    // Scoped to a year: `Other, Olivia` 1990 and `Other, Oscar` 2001 both print as "Other",
+    // because the label already tells them apart. Two Smiths in the same year do not.
+    let mut families: std::collections::HashMap<(String, String), std::collections::HashSet<String>> =
         Default::default();
     for entry in entries {
+        let year = entry_year(entry);
         for (_, people) in &entry.names {
             for p in people {
                 families
-                    .entry(p.name.to_lowercase())
+                    .entry((p.name.to_lowercase(), year.clone()))
                     .or_default()
                     .insert(p.given_name.to_lowercase());
             }
         }
     }
     let mut levels = std::collections::HashMap::new();
-    for (family, people) in &families {
+    for ((family, year), people) in &families {
         for given in people {
             let level = if people.len() == 1 {
                 0
@@ -122,10 +127,43 @@ fn uniqueness(entries: &[&Effective]) -> std::collections::HashMap<(String, Stri
                     2
                 }
             };
-            levels.insert((family.clone(), given.clone()), level);
+            levels.insert((family.clone(), given.clone(), year.clone()), level);
         }
     }
     levels
+}
+
+/// The year a label would show, for the uniqueness scopes.
+fn entry_year(entry: &Effective) -> String {
+    let value = |name: &str| {
+        entry
+            .values
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.clone())
+    };
+    let raw = value("date").or_else(|| value("year")).unwrap_or_default();
+    // The same rule the extradate uses: a range is its two years, anything else is its
+    // first four digits. A different rule here splits entries that biblatex keeps
+    // together and invents suffixes.
+    if raw.contains('/') {
+        let years: Vec<String> = raw
+            .split('/')
+            .filter_map(|side| {
+                let digits: String = side.chars().filter(|c| c.is_ascii_digit()).collect();
+                (digits.len() >= 4).then(|| digits[..4].to_string())
+            })
+            .collect();
+        if years.len() == 2 {
+            return format!("{}–{}", years[0], years[1]);
+        }
+    }
+    let digits: String = raw.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.len() >= 4 {
+        digits[..4].to_string()
+    } else {
+        raw
+    }
 }
 
 /// biblatex's `uniquelist`, as a count per entry.
@@ -220,7 +258,8 @@ fn uniquelist(entries: &[&Effective], maxnames: usize) -> std::collections::Hash
 fn name_block(
     field_name: &str,
     people: &[Person],
-    levels: &std::collections::HashMap<(String, String), u8>,
+    year: &str,
+    levels: &std::collections::HashMap<(String, String, String), u8>,
     ul: Option<usize>,
 ) -> String {
     let mut out = String::new();
@@ -234,7 +273,11 @@ fn name_block(
     ));
     for (i, p) in people.iter().enumerate() {
         let level = levels
-            .get(&(p.name.to_lowercase(), p.given_name.to_lowercase()))
+            .get(&(
+                p.name.to_lowercase(),
+                p.given_name.to_lowercase(),
+                year.to_string(),
+            ))
             .copied()
             .unwrap_or(0);
         let part = if level == 0 { "base" } else { "given" };
@@ -608,14 +651,22 @@ fn write_entry(
     entry: &Effective,
     extras: &HashMap<String, u8>,
     labels: &HashMap<String, (String, Option<u8>)>,
-    levels: &std::collections::HashMap<(String, String), u8>,
+    levels: &std::collections::HashMap<(String, String, String), u8>,
     lists: &std::collections::HashMap<String, usize>,
     inset: Option<&str>,
     options: &str,
 ) {
+    // A `related` entry is stored under its hash, and stays out of the list.
+    let (entry_key, options) = match &entry.data_key {
+        Some(hash) => (
+            hash.as_str(),
+            "skipbib=true,skipbiblist=true,skiplab=true",
+        ),
+        None => (entry.key.as_str(), options),
+    };
     out.push_str(&format!(
-        "    \\entry{{{}}}{{{}}}{{{options}}}{{}}\n",
-        entry.key, entry.kind
+        "    \\entry{{{entry_key}}}{{{}}}{{{options}}}{{}}\n",
+        entry.kind
     ));
 
     match inset {
@@ -630,10 +681,11 @@ fn write_entry(
         _ => {}
     }
 
+    let year = entry_year(entry);
     let mut label_source = String::new();
     for (field_name, people) in &entry.names {
         let ul = if label_source.is_empty() { lists.get(&entry.key).copied() } else { None };
-        out.push_str(&name_block(field_name, people, levels, ul));
+        out.push_str(&name_block(field_name, people, &year, levels, ul));
         if label_source.is_empty()
             && matches!(field_name.as_str(), "author" | "editor" | "translator")
         {
@@ -822,7 +874,8 @@ fn write_entry(
         }
     }
 
-    if let Some(n) = extras.get(&entry.key) {
+    // A `related` entry is data, not a bibliography item: it carries no label of its own.
+    if let Some(n) = entry.data_key.is_none().then(|| extras.get(&entry.key)).flatten() {
         field(out, "extradate", &n.to_string());
         // `extraname` counts the occurrences of one name list in a year. biblatex uses it
         // to decide which of them prints the name and which get the dash: with ten copies
