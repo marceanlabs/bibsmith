@@ -25,3 +25,7 @@ oracle/**/*.biber
 oracle/**/*.bibsmith
 oracle/**/*.ours
 !oracle/doc/doc.bcf
+
+# The control file the tests read: it is how biblatex describes the document, not a
+# build artefact, and the tests cannot run without it.
+!oracle/nyt.bcf
