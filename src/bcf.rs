@@ -35,6 +35,11 @@ pub struct ControlFile {
     pub citekeys: Vec<String>,
     /// The datalist name, e.g. `nyt/global//global/global/global`.
     pub datalist_name: String,
+    /// Effective biblatex options, as the style left them.
+    ///
+    /// `uniquelist` lives here: the numeric style turns it off, and biber then writes no
+    /// `ul` at all, so the value has to be read rather than assumed.
+    pub options: std::collections::HashMap<String, String>,
     /// The sorting template name, e.g. `nyt`.
     pub sorting_template: String,
     /// The template's sort groups, in order.
@@ -60,11 +65,20 @@ pub struct ControlFile {
 }
 
 impl ControlFile {
+    /// One effective option, e.g. `uniquelist`.
+    pub fn option(&self, name: &str) -> Option<&str> {
+        self.options.get(name).map(|s| s.as_str())
+    }
+
     pub fn parse(xml: &str) -> Result<Self, String> {
+        let mut ctl_options = options_from_xml(xml);
         let mut reader = Reader::from_str(xml);
         reader.config_mut().trim_text(true);
 
-        let mut ctl = ControlFile::default();
+        let mut ctl = ControlFile {
+            options: std::mem::take(&mut ctl_options),
+            ..ControlFile::default()
+        };
         let mut stack: Vec<String> = Vec::new();
         // Where we are inside a sorting template.
         let mut in_template = false;
@@ -210,4 +224,25 @@ impl ControlFile {
         }
         Ok(ctl)
     }
+}
+
+
+/// The `<bcf:key>name</bcf:key><bcf:value>v</bcf:value>` pairs in the options blocks.
+///
+/// Every component repeats the same keys, so the last value wins; for `uniquelist` the
+/// components agree, and the style's own answer is the one that matters.
+fn options_from_xml(xml: &str) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    let mut key: Option<String> = None;
+    for line in xml.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("<bcf:key>") {
+            key = rest.strip_suffix("</bcf:key>").map(|k| k.to_string());
+        } else if let Some(rest) = line.strip_prefix("<bcf:value>") {
+            if let (Some(k), Some(v)) = (key.take(), rest.strip_suffix("</bcf:value>")) {
+                out.insert(k, v.to_string());
+            }
+        }
+    }
+    out
 }

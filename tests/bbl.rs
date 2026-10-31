@@ -417,3 +417,60 @@ fn a_url_is_written_raw_because_it_sits_in_verbatim() {
     assert!(bbl.contains("x=1&y=2"), "inside \\verb an escaped & prints a backslash");
     assert!(!bbl.contains("x=1\\&y=2"));
 }
+
+#[test]
+fn a_name_list_is_extended_only_until_it_tells_two_entries_apart() {
+    // Measured against biber: two entries that share a year and a first author are shown
+    // further until the lists differ, and no further.
+    let src = String::from(
+        "@article{u1, author = {Akyildiz, Ian F. and Su, W. and Sankarasubramaniam, E. and Cayirci, E.}, title = {One}, journal = {J}, year = {2002}}\n\
+         @article{u2, author = {Akyildiz, Ian F. and Bogdanov, X. and Others, Y. and More, Z.}, title = {Two}, journal = {J}, year = {2002}}\n\
+         @article{u3, author = {Zeta, Zed and One, A. and Two, B. and Three, C.}, title = {Three}, journal = {J}, year = {2002}}\n",
+    );
+    let db = biblatex::Bibliography::parse(&src).unwrap();
+    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.key, e.fields))
+        .collect();
+    let entries: Vec<_> = ["u1", "u2", "u3"]
+        .iter()
+        .map(|k| bibsmith::merge::effective(&db, db.get(k).unwrap(), &raw))
+        .collect();
+    let refs: Vec<&_> = entries.iter().collect();
+    let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
+    let ctl = ControlFile::parse(&xml).unwrap();
+    let bbl = write_bbl(&ctl, &refs, &HashMap::new(), &HashMap::new());
+    assert!(bbl.contains("{ul=2}"), "the two Akyildiz entries need a second name");
+    assert!(!bbl.contains("{ul=3}"), "two names already separate them");
+    let zeta = &bbl[bbl.find("\\entry{u3}").unwrap()..];
+    assert!(
+        !zeta[..zeta.find("\\endentry").unwrap()].contains("ul="),
+        "a unique first author is left alone"
+    );
+}
+
+#[test]
+fn an_identical_name_list_is_not_extended() {
+    // Two copies of one record: showing more names cannot separate them, and biber writes
+    // nothing.
+    let src = String::from(
+        "@article{d1, author = {Solo, A. and Second, B. and Third, C. and Fourth, D.}, title = {T}, journal = {J}, year = {2001}}\n\
+         @article{d2, author = {Solo, A. and Second, B. and Third, C. and Fourth, D.}, title = {T}, journal = {J}, year = {2001}}\n",
+    );
+    let db = biblatex::Bibliography::parse(&src).unwrap();
+    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.key, e.fields))
+        .collect();
+    let entries: Vec<_> = ["d1", "d2"]
+        .iter()
+        .map(|k| bibsmith::merge::effective(&db, db.get(k).unwrap(), &raw))
+        .collect();
+    let refs: Vec<&_> = entries.iter().collect();
+    let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
+    let ctl = ControlFile::parse(&xml).unwrap();
+    let bbl = write_bbl(&ctl, &refs, &HashMap::new(), &HashMap::new());
+    assert!(!bbl.contains("ul="), "nothing to gain, so nothing written");
+}

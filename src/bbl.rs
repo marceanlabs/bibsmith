@@ -128,14 +128,118 @@ fn uniqueness(entries: &[&Effective]) -> std::collections::HashMap<(String, Stri
     levels
 }
 
+/// biblatex's `uniquelist`, as a count per entry.
+///
+/// Where two entries share a year and the first name, the list has to be shown further
+/// until it differs: biber writes `\name{author}{4}{ul=2}{...}`, and prints
+/// "Akyildiz, I. F., W. Su, et al." instead of stopping at the first name. If the lists
+/// agree all the way, the count is the whole list — biber writes `ul=4` there, and prints
+/// every name. Where one name already tells the entries apart, nothing is written.
+fn uniquelist(entries: &[&Effective]) -> std::collections::HashMap<String, usize> {
+    fn keys(people: &[biblatex::Person]) -> Vec<String> {
+        people
+            .iter()
+            .map(|p| format!("{}\u{1}{}", p.name.to_lowercase(), p.given_name.to_lowercase()))
+            .collect()
+    }
+
+    let mut groups: std::collections::HashMap<String, Vec<&Effective>> = Default::default();
+    for entry in entries {
+        if entry.names.is_empty() {
+            continue;
+        }
+        groups.entry(label_year(entry)).or_default().push(entry);
+    }
+
+    let mut out = std::collections::HashMap::new();
+    for (_, members) in groups {
+        if members.len() < 2 {
+            continue;
+        }
+        for entry in &members {
+            let Some((field, people)) = entry.names.first() else { continue };
+            let mine = keys(people);
+            if mine.is_empty() {
+                continue;
+            }
+            let others: Vec<Vec<String>> = members
+                .iter()
+                .filter(|o| o.key != entry.key)
+                .filter_map(|o| o.names.iter().find(|(f, _)| f == field).map(|(_, p)| keys(p)))
+                .collect();
+
+            // Duplicates of my own list are not a clash: they are the same people, and
+            // the extradate already separates them. Only a *different* list can be
+            // disambiguated by showing more names.
+            let mut distinct: Vec<Vec<String>> = Vec::new();
+            for theirs in &others {
+                if *theirs != mine && !distinct.contains(theirs) {
+                    distinct.push(theirs.clone());
+                }
+            }
+            let clashes_at = |n: usize| -> Vec<&Vec<String>> {
+                distinct
+                    .iter()
+                    .filter(|theirs| theirs.len() >= n && theirs[..n] == mine[..n])
+                    .collect()
+            };
+
+            // The shortest list that no other entry shares. If the whole list is shared,
+            // there are two outcomes, and they were measured separately: against a
+            // *longer* list that starts the same way, biber shows every name; against an
+            // identical list it writes nothing, because showing them all gains nothing.
+            let mut n = 1;
+            while n <= mine.len() {
+                if clashes_at(n).is_empty() {
+                    break;
+                }
+                n += 1;
+            }
+            if n > mine.len() {
+                let longer = distinct
+                    .iter()
+                    .any(|theirs| theirs.len() > mine.len() && theirs[..mine.len()] == mine[..]);
+                if longer {
+                    out.insert(entry.key.clone(), mine.len());
+                }
+                continue;
+            }
+            if n > 1 {
+                out.insert(entry.key.clone(), n);
+            }
+        }
+    }
+    out
+}
+
+/// The year a label would show, as a group key.
+fn label_year(entry: &Effective) -> String {
+    let value = |name: &str| {
+        entry
+            .values
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.clone())
+    };
+    if let Some(date) = value("date") {
+        return date.chars().take(4).collect();
+    }
+    value("year").unwrap_or_default()
+}
+
 fn name_block(
     field_name: &str,
     people: &[Person],
     levels: &std::collections::HashMap<(String, String), u8>,
+    ul: Option<usize>,
 ) -> String {
     let mut out = String::new();
+    let options = match ul {
+        Some(n) => format!("ul={n}"),
+        None => String::new(),
+    };
     out.push_str(&format!(
-        "      \\name{{{field_name}}}{{{}}}{{}}{{%\n",
+        "      \\name{{{field_name}}}{{{}}}{{{options}}}{{%\n",
         people.len()
     ));
     for (i, p) in people.iter().enumerate() {
@@ -402,6 +506,13 @@ pub fn write_bbl(
     // Uniqueness is a property of the whole bibliography: a name is only shortened or
     // expanded by comparison with the others.
     let levels = uniqueness(ordered);
+    // The style decides whether a name list is ever extended: `numeric` turns
+    // `uniquelist` off, and biber writes no `ul` there at all.
+    let lists = if ctl.option("uniquelist") == Some("false") {
+        Default::default()
+    } else {
+        uniquelist(ordered)
+    };
 
     let mut out = String::new();
     out.push_str("% $ biblatex auxiliary file $\n");
@@ -434,6 +545,7 @@ pub fn write_bbl(
                 extras,
                 labels,
                 &levels,
+                &lists,
                 Some(
                     member_of
                         .get(entry.key.as_str())
@@ -454,7 +566,7 @@ pub fn write_bbl(
         } else {
             None
         };
-        write_entry(&mut out, ctl, entry, extras, labels, &levels, inset, "");
+        write_entry(&mut out, ctl, entry, extras, labels, &levels, &lists, inset, "");
     }
 
     out.push_str("  \\enddatalist\n");
@@ -471,6 +583,7 @@ fn write_entry(
     extras: &HashMap<String, u8>,
     labels: &HashMap<String, (String, Option<u8>)>,
     levels: &std::collections::HashMap<(String, String), u8>,
+    lists: &std::collections::HashMap<String, usize>,
     inset: Option<&str>,
     options: &str,
 ) {
@@ -493,7 +606,8 @@ fn write_entry(
 
     let mut label_source = String::new();
     for (field_name, people) in &entry.names {
-        out.push_str(&name_block(field_name, people, levels));
+        let ul = if label_source.is_empty() { lists.get(&entry.key).copied() } else { None };
+        out.push_str(&name_block(field_name, people, levels, ul));
         if label_source.is_empty()
             && matches!(field_name.as_str(), "author" | "editor" | "translator")
         {
