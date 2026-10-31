@@ -247,13 +247,13 @@ fn strip_leading_zero(s: &str) -> String {
 ///
 /// A range such as `1984/1986` is two dates: the start under the prefix and the end
 /// under `end` + prefix, which is how biblatex prints "1984–1986".
-fn date_parts(out: &mut String, prefix: &str, value: &str) {
+fn date_parts(out: &mut String, prefix: &str, value: &str) -> bool {
     let (start, end) = match value.split_once('/') {
         Some((a, b)) => (a.trim(), Some(b.trim())),
         None => (value.trim(), None),
     };
 
-    write_one_date(out, prefix, start);
+    let wrote = write_one_date(out, prefix, start);
     if let Some(end) = end {
         // The end of a range takes the prefix, then `end`: `eventdate` gives
         // eventendyear, not endeventyear, and it needs its own era field or biblatex
@@ -261,29 +261,61 @@ fn date_parts(out: &mut String, prefix: &str, value: &str) {
         write_one_date(out, &format!("{prefix}end"), end);
         field(out, &format!("{prefix}enddateera"), "ce");
     }
-    if !prefix.is_empty() {
+    if !prefix.is_empty() && wrote {
         field(out, &format!("{prefix}dateera"), "ce");
     }
+    wrote
 }
 
-fn write_one_date(out: &mut String, prefix: &str, value: &str) {
-    let mut parts = value.split('-').map(|s| s.trim());
-    if let Some(year) = parts.next() {
-        if !year.is_empty() {
-            field(out, &format!("{prefix}year"), &year[..year.len().min(4)]);
-        }
+fn write_one_date(out: &mut String, prefix: &str, value: &str) -> bool {
+    // A date is all-or-nothing. `2019-06-01 00:00:00` is what a Zotero export writes,
+    // and biber rejects the whole field with a warning rather than printing a month of
+    // "100:00:00": the entry then reads "n.d.".
+    let Some((year, month, day)) = parse_date(value) else {
+        return false;
+    };
+    field(out, &format!("{prefix}year"), &year);
+    if let Some(month) = month {
+        field(out, &format!("{prefix}month"), &month);
     }
+    if let Some(day) = day {
+        field(out, &format!("{prefix}day"), &day);
+    }
+    true
+}
+
+/// Split and validate `YYYY[-MM[-DD]]`, returning nothing if any part is not a date.
+fn parse_date(value: &str) -> Option<(String, Option<String>, Option<String>)> {
+    let mut parts = value.split(['-', '/']).map(|s| s.trim());
+    let year = parts.next()?;
+    let year_digits: String = year.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if year_digits.len() != 4 {
+        return None;
+    }
+    let mut month_out = None;
     if let Some(month) = parts.next() {
-        if !month.is_empty() {
-            let month = month_number(month).map(|n| n.to_string()).unwrap_or_else(|| strip_leading_zero(month));
-            field(out, &format!("{prefix}month"), &month);
-        }
+        let parsed = if month.chars().all(|c| c.is_ascii_digit()) {
+            match month.parse::<u32>() {
+                Ok(n) if (1..=12).contains(&n) => n.to_string(),
+                _ => return None,
+            }
+        } else {
+            // A trailing time (`00:00:00`) or any other junk invalidates the date.
+            month_number(month)?.to_string()
+        };
+        month_out = Some(parsed);
     }
+    let mut day_out = None;
     if let Some(day) = parts.next() {
-        if !day.is_empty() {
-            field(out, &format!("{prefix}day"), &strip_leading_zero(day));
+        if !day.chars().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        match day.parse::<u32>() {
+            Ok(n) if (1..=31).contains(&n) => day_out = Some(n.to_string()),
+            _ => return None,
         }
     }
+    Some((year_digits, month_out, day_out))
 }
 
 /// Write the whole file.
@@ -492,7 +524,15 @@ fn write_entry(
         if SKIP_FIELDS.contains(&target) {
             continue;
         }
-        let value = if crate::normalize::RANGES.contains(&key.as_str()) {
+        let is_verbatim = matches!(
+            ctl.fieldtypes.get(target).map(|s| s.as_str()),
+            Some("verbatim") | Some("uri")
+        );
+        let value = if is_verbatim {
+            // Inside `\verb ... \endverb` nothing is special: an escaped `&` prints a
+            // literal backslash. biber writes these values raw.
+            value.clone()
+        } else if crate::normalize::RANGES.contains(&key.as_str()) {
             // biblatex prints ranges with its own macro, not a literal dash.
             crate::normalize::normalise_range(value).replace("--", "\\bibrangedash ")
         } else {
@@ -519,13 +559,15 @@ fn write_entry(
     // or the older `year`/`month`/`day`, and both have to reach it as parts — but a
     // legacy month is not a date: `Jan.-March` is one month, and splitting it on the
     // dash hands biblatex a day of "March".
-    match entry.values.iter().find(|(k, _)| k == "date") {
+    let has_date = match entry.values.iter().find(|(k, _)| k == "date") {
         Some((_, date)) => date_parts(out, "", date),
         None => {
+            let mut wrote_year = false;
             if let Some((_, year)) = entry.values.iter().find(|(k, _)| k == "year") {
                 let digits: Vec<char> = year.chars().filter(|c| c.is_ascii_digit()).collect();
-                if !digits.is_empty() {
-                    field(out, "year", &digits[..digits.len().min(4)].iter().collect::<String>());
+                if digits.len() == 4 {
+                    field(out, "year", &digits.iter().collect::<String>());
+                    wrote_year = true;
                 }
             }
             if let Some((_, month)) = entry.values.iter().find(|(k, _)| k == "month") {
@@ -536,9 +578,9 @@ fn write_entry(
             }
             // A legacy `day` is never written. biber emits a day only from a `date`, and
             // on a `year`/`month`/`day` entry it prints "Mar. 2008" — the 5 is dropped.
-            field(out, "dateera", "ce");
+            wrote_year
         }
-    }
+    };
 
     // The other date fields keep their prefix: `urldate` gives urlyear/urlmonth/urlday,
     // `eventdate` gives eventyear… and the end of a range gives eventendyear.
@@ -554,7 +596,16 @@ fn write_entry(
 
     // biblatex prints the year in the label only when this field is present, even when
     // it is empty: absent means "no label date" and the year moves to the end.
-    field(out, "labeldatesource", "");
+    // `nodate` is what makes biblatex print "(n.d.)" instead of "()" for an entry whose
+    // date it could not read — a Zotero export writes `2019-06-01 00:00:00`.
+    field(
+        out,
+        "labeldatesource",
+        if has_date { "" } else { "nodate" },
+    );
+    if has_date {
+        field(out, "dateera", "ce");
+    }
     if !label_source.is_empty() {
         field(out, "labelnamesource", &label_source);
     }
@@ -567,7 +618,6 @@ fn write_entry(
         "title"
     };
     field(out, "labeltitlesource", title_source);
-    field(out, "dateera", "ce");
 
     // The alphabetic label, and the number that disambiguates a repeated one:
     // biblatex prints the letter itself from the number.

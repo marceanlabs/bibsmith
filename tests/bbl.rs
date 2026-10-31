@@ -378,3 +378,42 @@ fn an_empty_author_means_no_author() {
     let eff = bibsmith::merge::effective(&db, db.get("emptyauthor").unwrap(), &raw);
     assert!(eff.names.is_empty(), "a phantom person sorts the entry to the front");
 }
+
+fn one_bbl(entry: &str, key: &str) -> String {
+    let mut src = String::from(entry);
+    src.push('\n');
+    src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
+    let db = biblatex::Bibliography::parse(&src).unwrap();
+    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.key, e.fields))
+        .collect();
+    let eff = bibsmith::merge::effective(&db, db.get(key).unwrap(), &raw);
+    let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
+    let ctl = ControlFile::parse(&xml).unwrap();
+    write_bbl(&ctl, &[&eff], &HashMap::new(), &HashMap::new())
+}
+
+#[test]
+fn a_zotero_datetime_is_not_a_date() {
+    // `2019-06-01 00:00:00` is what Zotero writes. biber rejects the field and the entry
+    // reads "n.d."; a naive split prints a month of "100:00:00".
+    let bbl = one_bbl(
+        "@book{zd, author = {Jones, Alice}, title = {T}, date = {2019-06-01 00:00:00}}",
+        "zd",
+    );
+    assert!(!bbl.contains("\\field{year}"), "an unreadable date has no year");
+    assert!(bbl.contains("\\field{labeldatesource}{nodate}"), "this is what prints n.d.");
+    assert!(!bbl.contains("dateera"));
+}
+
+#[test]
+fn a_url_is_written_raw_because_it_sits_in_verbatim() {
+    let bbl = one_bbl(
+        "@online{zu, author = {A, B}, title = {T}, year = {2001}, url = {https://e.org/a?x=1&y=2}}",
+        "zu",
+    );
+    assert!(bbl.contains("x=1&y=2"), "inside \\verb an escaped & prints a backslash");
+    assert!(!bbl.contains("x=1\\&y=2"));
+}

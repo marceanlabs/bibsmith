@@ -30,8 +30,10 @@ done
 cd "$DIR"
 "$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >/dev/null 2>&1 || true
 
-# What biber produces.
-"$TEXBIN/biber" --quiet "$BASE" >/dev/null 2>&1
+# What biber produces. It exits non-zero on this corpus because it warns about an entry
+# it refuses, and it still writes the .bbl: the file, not the status, is the oracle.
+"$TEXBIN/biber" --quiet "$BASE" >/dev/null 2>&1 || true
+"$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >/dev/null 2>&1
 "$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >/dev/null 2>&1 || true
 "$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >/dev/null 2>&1 || true
 cp "$BASE.pdf" "$BASE.pdf.biber"
