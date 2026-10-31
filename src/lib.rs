@@ -41,6 +41,27 @@ pub fn scheme_or_default(s: &str) -> Result<Scheme, String> {
 /// biber warns and prints the name as written, so the definition it is missing is the
 /// name itself, and the retry is what biber's behaviour costs.
 pub fn parse_lenient(src: &str) -> Result<biblatex::Bibliography, biblatex::ParseError> {
+    // A `crossref` loop makes the parser recurse until the stack gives out, which aborts
+    // the process: `@book{a, crossref={b}}` and `@book{b, crossref={a}}` is enough. biber
+    // reads that file without complaint and writes both entries back unchanged, so the
+    // fields are hidden from the parser and kept for everything downstream, which reads
+    // them from the raw text.
+    // The check only says "no loop" when the file reads cleanly. A file the raw reader
+    // cannot make sense of is exactly the one where a loop can hide, so it is hidden from
+    // the parser too: the fields are still in the raw text, which is where the inheritance
+    // is read from.
+    let text;
+    let guarded = match crate::normalize::raw_entries(src) {
+        Ok(entries) => has_crossref_cycle(&entries),
+        Err(_) => true,
+    };
+    let src = match guarded {
+        true => {
+            text = hide_crossref_fields(src);
+            text.as_str()
+        }
+        false => src,
+    };
     let mut prelude = String::new();
     for _ in 0..64 {
         let mut text = String::with_capacity(prelude.len() + src.len());
@@ -57,6 +78,65 @@ pub fn parse_lenient(src: &str) -> Result<biblatex::Bibliography, biblatex::Pars
         }
     }
     biblatex::Bibliography::parse(src)
+}
+
+/// Whether the `crossref` graph contains a loop.
+fn has_crossref_cycle(entries: &[crate::normalize::RawEntryView]) -> bool {
+    let edges: std::collections::HashMap<&str, &str> = entries
+        .iter()
+        .filter_map(|e| {
+            let target = e
+                .fields
+                .iter()
+                .find(|(k, _)| k == "crossref")
+                .map(|(_, v)| v.trim())?;
+            Some((e.key.as_str(), target))
+        })
+        .collect();
+    for start in edges.keys() {
+        let mut seen: Vec<&str> = Vec::new();
+        let mut at = *start;
+        while let Some(next) = edges.get(at) {
+            if seen.contains(&at) {
+                return true;
+            }
+            seen.push(at);
+            at = next;
+        }
+    }
+    false
+}
+
+/// Rename every `crossref` field name so the parser does not follow it.
+///
+/// Only a field name is touched: a `crossref` that appears inside a value is left alone,
+/// because that is text the author wrote.
+pub fn hide_crossref_fields(src: &str) -> String {
+    // A field name sits after `{` or `,` and before `=`, at any depth: a damaged file can
+    // nest one entry inside another, or leave a brace open, and the parser follows the
+    // field wherever it is. Text that merely mentions the word is left alone, because a
+    // field is followed by `=` and nothing else is.
+    let chars: Vec<char> = src.chars().collect();
+    let mut out = String::with_capacity(src.len() + 16);
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == 'c' || chars[i] == 'C' {
+            let word: String = chars[i..chars.len().min(i + 8)].iter().collect();
+            if word.eq_ignore_ascii_case("crossref") {
+                let before = out.chars().rev().find(|n| !n.is_whitespace());
+                let after = chars[i + 8..].iter().find(|n| !n.is_whitespace());
+                if matches!(before, Some(',') | Some('{')) && after == Some(&'=') {
+                    out.push_str(&word);
+                    out.push('_');
+                    i += 8;
+                    continue;
+                }
+            }
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    out
 }
 
 /// One bibliography database, as parsed.

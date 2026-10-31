@@ -98,3 +98,51 @@ fn deep_nesting_does_not_take_the_process_down() {
 fn a_file_of_at_signs_does_not_take_the_process_down() {
     no_panic("ats.bib", &vec![b'@'; 100_000]);
 }
+
+#[test]
+fn a_crossref_loop_is_read_as_written_not_followed_forever() {
+    // Two entries pointing at each other make a recursive resolver run until the stack
+    // gives out, which aborts the process. biber reads the file, keeps both crossref
+    // fields and exits zero, so that is the contract.
+    let (ok, out, err) = run(
+        "loop.bib",
+        b"@book{a, crossref={b}, title={A}}\n@book{b, crossref={a}, title={B}}\n",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(out.contains("@BOOK{a,"), "a must survive: {out}");
+    assert!(out.contains("CROSSREF = {b}"), "the field must survive: {out}");
+    assert!(out.contains("CROSSREF = {a}"), "{out}");
+}
+
+#[test]
+fn an_entry_that_crossrefs_itself_is_read_as_written() {
+    let (ok, out, err) = run("self.bib", b"@book{a, crossref={a}, title={Self}}\n");
+    assert!(ok, "stderr: {err}");
+    assert!(out.contains("CROSSREF = {a}"), "{out}");
+}
+
+#[test]
+fn a_legitimate_crossref_is_still_resolved() {
+    // The inheritance is the reason the resolver exists: a chapter inherits its book's
+    // title and editor.
+    let (ok, out, err) = run(
+        "chain.bib",
+        b"@book{parent, title={The Book}, publisher={P}, year={2000}}\n\
+          @inbook{child, crossref={parent}, title={A Chapter}, pages={1--10}}\n",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(out.contains("PARENT") || out.contains("@INBOOK{child,"), "{out}");
+}
+
+#[test]
+fn a_crossref_inside_a_damaged_entry_is_still_not_followed() {
+    // The guard has to work on a file that is already broken: an entry nested inside
+    // another entry's value is exactly where a loop hides from a brace-counting scanner,
+    // and a stack overflow is not a parse error.
+    let (ok, out, err) = run(
+        "nested.bib",
+        b"@collection{a,\n title = {A},\n note = {@book{b, title={B}, crossref={a}}}\n}\n@book{c, crossref={a}, title={C}}\n",
+    );
+    assert!(ok, "stderr: {err}");
+    assert!(out.contains("@BOOK{c,"), "later entries must survive: {out}");
+}

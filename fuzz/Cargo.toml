@@ -1,0 +1,25 @@
+[package]
+name = "bibsmith-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.bibsmith]
+path = ".."
+
+[[bin]]
+name = "bib"
+path = "fuzz_targets/bib.rs"
+
+[[bin]]
+name = "bcf"
+path = "fuzz_targets/bcf.rs"
+test = false
+doc = false
+bench = false
