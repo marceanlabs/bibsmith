@@ -515,7 +515,24 @@ pub fn template_parts(
         // compared, which is how a bibliography with `sortkey` fields gets its own order.
         // An empty `sortkey` is not a value: every entry has one of those.
         let yielded = chosen.is_some();
-        parts.push(chosen.unwrap_or_else(|| vec![String::new()]));
+        // A group made only of date fields that yields nothing is "no date", and an entry
+        // with no date files after the dated ones sharing its name and title: measured on a
+        // two-entry file in numeric and in authoryear alike. The placeholder sorts above
+        // every real value, which is what "absent, and therefore last" means here.
+        let date_group = !group.items.is_empty()
+            && group.items.iter().all(|item| match item {
+                crate::bcf::SortItem::Field(f) => matches!(
+                    f.as_str(),
+                    "year" | "date" | "sortyear" | "origdate" | "eventdate" | "urldate"
+                ),
+                crate::bcf::SortItem::Literal(_) => false,
+            });
+        let empty_slot = if date_group {
+            vec!["\u{10FFFF}".to_string()]
+        } else {
+            vec![String::new()]
+        };
+        parts.push(chosen.unwrap_or(empty_slot));
         if yielded && group.finalsort {
             break;
         }

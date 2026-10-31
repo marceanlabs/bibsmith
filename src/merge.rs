@@ -354,10 +354,15 @@ pub fn effective(
                 continue; // a parent title must not overwrite a child's
             }
             let target = renamed.unwrap_or(lower);
-            if values.iter().any(|(k, _)| *k == target) {
-                continue;
+            // An empty field is an absent one: biblatex inherits over `organization = {}`
+            // and prints the parent's value, but not over a value the author wrote.
+            match values.iter().position(|(k, _)| *k == target) {
+                Some(index) if values[index].1.trim().is_empty() => {
+                    values[index].1 = value.clone();
+                }
+                Some(_) => continue,
+                None => values.push((target, value.clone())),
             }
-            values.push((target, value.clone()));
         }
 
         for field in NAME_FIELDS {

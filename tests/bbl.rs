@@ -715,3 +715,26 @@ fn two_entries_that_share_a_title_are_not_each_the_only_one() {
     let off = write_bbl(&ctl, &refs, &HashMap::new(), &HashMap::new());
     assert!(!off.contains("\\true{singletitle}"));
 }
+
+#[test]
+fn an_empty_field_is_an_absent_one_when_crossref_fills_it_in() {
+    // `organization = {}` on a child must not stop the parent's value arriving: biblatex
+    // inherits over an empty field and prints the parent's, and writing an empty list told
+    // the driver to print nothing.
+    let src = "@proceedings{parent, title = {P}, organization = {The OX Association}, year = {1983}}\n\
+               @inproceedings{child, crossref = {parent}, author = {Smith, Ann}, title = {T}, organization = {}}\n";
+    let db = bibsmith::parse_lenient(src).expect("parse");
+    let raw = bibsmith::normalize::raw_expanded_entries(src).expect("raw");
+    let raw: HashMap<String, Vec<(String, String)>> =
+        raw.into_iter().map(|e| (e.key, e.fields)).collect();
+    let effective: Vec<bibsmith::merge::Effective> =
+        db.iter().map(|entry| bibsmith::merge::effective(&db, entry, &raw)).collect();
+    let child = effective.iter().find(|e| e.key == "child").expect("child");
+    let org = child
+        .values
+        .iter()
+        .find(|(k, _)| k == "organization")
+        .map(|(_, v)| v.as_str())
+        .unwrap_or("");
+    assert_eq!(org, "The OX Association", "the parent's value should arrive");
+}
