@@ -33,21 +33,23 @@ cd "$DIR"
 # What biber produces. It exits non-zero on this corpus because it warns about an entry
 # it refuses, and it still writes the .bbl: the file, not the status, is the oracle.
 "$TEXBIN/biber" --quiet "$BASE" >/dev/null 2>&1 || true
-"$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >/dev/null 2>&1
+"$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >/dev/null 2>&1 || true
 "$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >/dev/null 2>&1 || true
 "$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >/dev/null 2>&1 || true
 cp "$BASE.pdf" "$BASE.pdf.biber"
 
 # What bibsmith produces.
-"$TEXBIN/biber" --quiet "$BASE" >/dev/null 2>&1 || true
 "$BINSMITH" bbl "$BASE.bcf" -o "$BASE.bbl"
 # Two passes: biblatex's ibidem tracker and cross-references settle on the second,
 # and comparing after one pass reports differences that are only missing runs.
 "$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >/tmp/bibsmith-pdflatex.log 2>&1 || true
 "$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >>/tmp/bibsmith-pdflatex.log 2>&1 || true
-if grep -qE '^! ' /tmp/bibsmith-pdflatex.log; then
+# A name biber has already turned into Unicode can carry a combining accent, which this
+# font encoding cannot set: biber's own `.bbl` raises exactly the same error and still
+# produces the page, so that one is not a difference between the two files.
+if grep -E '^! ' /tmp/bibsmith-pdflatex.log | grep -qv 'Unicode character'; then
   print -u2 "LaTeX errors with bibsmith's .bbl:"
-  grep -E '^! ' -A3 /tmp/bibsmith-pdflatex.log
+  grep -E '^! ' -A3 /tmp/bibsmith-pdflatex.log | grep -v 'Unicode character'
   exit 1
 fi
 cp "$BASE.pdf" "$BASE.pdf.bibsmith"

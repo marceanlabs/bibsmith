@@ -239,7 +239,13 @@ pub fn effective(
         .collect();
     let mut names: Vec<(String, Vec<Person>)> = Vec::new();
     for field in NAME_FIELDS {
-        let people = crate::names::names(entry, field);
+        let written = raw.get(&entry.key).and_then(|fields| {
+            fields
+                .iter()
+                .find(|(k, _)| k == field)
+                .map(|(_, v)| v.as_str())
+        });
+        let people = crate::names::names_with(entry, field, written);
         if !people.is_empty() {
             names.push((field.to_string(), people));
         }

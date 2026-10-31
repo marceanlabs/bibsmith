@@ -671,6 +671,31 @@ fn verb(out: &mut String, name: &str, value: &str) {
 
 /// A legacy `month = {January}` reaches biblatex as a name, and a name prints as "jan"
 /// instead of "Jan.". biber converts it to the number; this is the same table.
+/// A legacy month as biblatex wants it: a number where the value names a month, and the
+/// value itself where it does not. `"10~" # jan` is one month macro joined to a prefix, and
+/// biber writes `10~1` — the macro means the number, not the word.
+fn month_field(value: &str) -> String {
+    if let Some(n) = month_number(value) {
+        return n.to_string();
+    }
+    let trimmed = value.trim();
+    let tail: String = trimmed
+        .chars()
+        .rev()
+        .take_while(|c| c.is_alphabetic())
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    if !tail.is_empty() {
+        if let Some(n) = month_number(&tail) {
+            let head = &trimmed[..trimmed.len() - tail.len()];
+            return format!("{head}{n}");
+        }
+    }
+    trimmed.to_string()
+}
+
 fn month_number(month: &str) -> Option<u8> {
     const NAMES: [&str; 12] = [
         "january",
@@ -715,6 +740,14 @@ fn month_number(month: &str) -> Option<u8> {
 /// A range such as `1984/1986` is two dates: the start under the prefix and the end
 /// under `end` + prefix, which is how biblatex prints "1984–1986".
 fn date_parts(out: &mut String, prefix: &str, value: &str) -> bool {
+    // `year = "{\noopsort{1973b}}1973"` is how BibTeX files ask to sort on one string and
+    // print another. biber prints 1973, so the command comes off before the number is read.
+    let cleaned = if value.contains('\\') {
+        crate::normalize::strip_tex_commands(value)
+    } else {
+        value.to_string()
+    };
+    let value = cleaned.as_str();
     let (start, end) = match value.split_once('/') {
         Some((a, b)) => (a.trim(), Some(b.trim())),
         None => (value.trim(), None),
@@ -818,6 +851,17 @@ pub fn write_bbl_scoped(
     extras_by_section: &[HashMap<String, u8>],
     labels: &HashMap<String, (String, Option<u8>)>,
 ) -> String {
+    write_bbl_full(ctl, sections, extras_by_section, labels, "")
+}
+
+/// The same, with the `@PREAMBLE` text the `.bib` asked for written into the header.
+pub fn write_bbl_full(
+    ctl: &ControlFile,
+    sections: &[(&str, &[&Effective])],
+    extras_by_section: &[HashMap<String, u8>],
+    labels: &HashMap<String, (String, Option<u8>)>,
+    preamble: &str,
+) -> String {
     let mut out = String::new();
     out.push_str("% $ biblatex auxiliary file $\n");
     out.push_str("% $ biblatex bbl format version 3.3 $\n");
@@ -833,7 +877,18 @@ pub fn write_bbl_scoped(
     out.push_str("     {Missing 'biblatex' package}\n");
     out.push_str("     {The bibliography requires the 'biblatex' package.}\n");
     out.push_str("      \\aftergroup\\endinput}\n");
-    out.push_str("  {}\n\\endgroup\n\n\n");
+    out.push_str("  {}\n\\endgroup\n");
+    // `@PREAMBLE` is TeX the `.bib` author asked to have in the header: without it a
+    // `\noopsort` in a year field is undefined and the document will not build.
+    if !preamble.trim().is_empty() {
+        // `\preamble{...}` is the hook biblatex runs for this; anything else before
+        // `\refsection` is skipped and a `\noopsort` in a year stays undefined.
+        out.push_str("\n\\preamble{%\n");
+        out.push_str(preamble.trim());
+        out.push_str("}\n");
+        out.push('\n');
+    }
+    out.push_str("\n\n");
 
     for (index, (section_no, ordered)) in sections.iter().map(|(n, o)| (n, *o)).enumerate() {
         let extras = extras_by_section
@@ -1143,17 +1198,14 @@ fn write_entry(
         None => {
             let mut wrote_year = false;
             if let Some((_, year)) = entry.values.iter().find(|(k, _)| k == "year") {
-                let digits: Vec<char> = year.chars().filter(|c| c.is_ascii_digit()).collect();
-                if digits.len() == 4 {
-                    field(out, "year", &digits.iter().collect::<String>());
-                    wrote_year = true;
-                }
+                // A legacy year goes through as the author wrote it: biber keeps
+                // `{\noopsort{1973b}}1973` whole and biblatex strips the command itself.
+                // Reading the digits here would print 1973b nowhere and lose the sort key.
+                field(out, "year", year.trim());
+                wrote_year = true;
             }
             if let Some((_, month)) = entry.values.iter().find(|(k, _)| k == "month") {
-                let month = month_number(month)
-                    .map(|n| n.to_string())
-                    .unwrap_or_else(|| month.trim().to_string());
-                field(out, "month", &month);
+                field(out, "month", &month_field(month));
             }
             // A legacy `day` is never written. biber emits a day only from a `date`, and
             // on a `year`/`month`/`day` entry it prints "Mar. 2008" — the 5 is dropped.
@@ -1177,12 +1229,20 @@ fn write_entry(
     // it is empty: absent means "no label date" and the year moves to the end.
     // `nodate` is what makes biblatex print "(n.d.)" instead of "()" for an entry whose
     // date it could not read — a Zotero export writes `2019-06-01 00:00:00`.
-    field(
-        out,
-        "labeldatesource",
-        if has_date { "" } else { "nodate" },
-    );
-    if has_date {
+    // The styles differ in what they ask for, and biber writes only what was asked: a
+    // numeric style sets `labelalpha=0` and `labeldateparts=0` and carries none of these.
+    let labelled_date = ctl.option("labeldateparts") != Some("0");
+    let alphabetic = ctl.option("labelalpha") != Some("0");
+    if labelled_date {
+        field(
+            out,
+            "labeldatesource",
+            if has_date { "" } else { "nodate" },
+        );
+    }
+    // `dateera` belongs to an EDTF `date` that was read: a legacy `year` has no era to
+    // name, and a date biber could not read has none either.
+    if has_date && entry.values.iter().any(|(k, _)| k == "date") {
         field(out, "dateera", "ce");
     }
     if !label_source.is_empty() {
@@ -1193,17 +1253,21 @@ fn write_entry(
     // whole title instead of the short one.
     let title_source = if entry.values.iter().any(|(k, _)| k == "shorttitle") {
         "shorttitle"
-    } else {
+    } else if entry.values.iter().any(|(k, _)| k == "title") {
         "title"
+    } else {
+        ""
     };
-    field(out, "labeltitlesource", title_source);
+    if !title_source.is_empty() {
+        field(out, "labeltitlesource", title_source);
+    }
     if singles.contains(&entry.key) {
         out.push_str("      \\true{singletitle}\n");
     }
 
     // The alphabetic label, and the number that disambiguates a repeated one:
     // biblatex prints the letter itself from the number.
-    if let Some((label, extra)) = labels.get(&entry.key) {
+    if let (true, Some((label, extra))) = (alphabetic, labels.get(&entry.key)) {
         if !label.is_empty() {
             field(out, "labelalpha", label);
         }
@@ -1213,7 +1277,13 @@ fn write_entry(
     }
 
     // A `related` entry is data, not a bibliography item: it carries no label of its own.
-    if let Some(n) = entry.data_key.is_none().then(|| extras.get(&entry.key)).flatten() {
+    if let Some(n) = entry
+        .data_key
+        .is_none()
+        .then(|| extras.get(&entry.key))
+        .flatten()
+        .filter(|_| labelled_date)
+    {
         field(out, "extradate", &n.to_string());
         // `extraname` counts the occurrences of one name list in a year. biblatex uses it
         // to decide which of them prints the name and which get the dash: with ten copies

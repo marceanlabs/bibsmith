@@ -156,7 +156,10 @@ fn name_part(entry: &Entry) -> Vec<String> {
         // without an author or editor.
         if let Some(key) = plain(entry, "key").or_else(|| plain(entry, "sortkey")) {
             if !key.trim().is_empty() {
-                return vec![key];
+                // A legacy `key` is often markup rather than text: `Kn{\printfirst{v}{1987}}`
+                // files under "Knv", next to names beginning that way, and collating the
+                // braces instead puts it before them.
+                return vec![sort_text(&key)];
             }
         }
         return vec![title_part(entry)];
@@ -219,7 +222,30 @@ fn title_part(entry: &Entry) -> String {
 pub type Parts = Vec<Vec<String>>;
 
 fn one(s: String) -> Vec<String> {
-    vec![s]
+    vec![sort_text(&s)]
+}
+
+/// A sort key as the collator should see it: without the braces that protect a letter's
+/// case and without the names of TeX commands, which are markup rather than text.
+///
+/// biblatex sorts on text, so `key = {Kn{\printfirst{v}{1987}}}` files next to names
+/// beginning `Knv`; collating the braces instead puts the entry before `Knuth`, because
+/// braces are symbols and this collator orders symbols before letters.
+fn sort_text(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '{' | '}' => {}
+            '\\' => {
+                while chars.peek().is_some_and(|c| c.is_alphabetic()) {
+                    chars.next();
+                }
+            }
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 /// The parts of one entry's sort key, in comparison order. Public because
@@ -313,6 +339,9 @@ fn compare_parts(
 ) -> std::cmp::Ordering {
     for (pa, pb) in a.iter().zip(b.iter()) {
         for (xa, xb) in pa.iter().zip(pb.iter()) {
+            // An entry with nothing in the slot sorts after one that has something:
+            // a document undated in the same year as a dated one files after it, which
+            // is what biber does, not before as an empty string would.
             let ord = collator.compare(xa, xb);
             if ord != std::cmp::Ordering::Equal {
                 return ord;

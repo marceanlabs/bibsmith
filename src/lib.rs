@@ -18,7 +18,7 @@ pub mod names;
 pub mod normalize;
 pub mod sort;
 
-pub use bbl::{write_bbl, write_bbl_scoped, write_bbl_sections};
+pub use bbl::{write_bbl, write_bbl_full, write_bbl_scoped, write_bbl_sections};
 pub use bcf::ControlFile;
 pub use disambiguate::{disambiguate, suffix_for};
 pub use normalize::{
@@ -62,6 +62,11 @@ pub fn parse_lenient(src: &str) -> Result<biblatex::Bibliography, biblatex::Pars
         }
         false => src,
     };
+    let text;
+    let src = {
+        text = strip_preamble(src);
+        text.as_str()
+    };
     let mut prelude = String::new();
     for _ in 0..64 {
         let mut text = String::with_capacity(prelude.len() + src.len());
@@ -74,10 +79,68 @@ pub fn parse_lenient(src: &str) -> Result<biblatex::Bibliography, biblatex::Pars
                 };
                 prelude.push_str(&format!("@string{{{name} = \"{name}\"}}\n"));
             }
+            Err(e) => {
+                // A bare abbreviation or a `#` join is legal BibTeX and a parser error
+                // here. Repair the one line the error points at and read the file again.
+                let line = src[..e.span.start.min(src.len())]
+                    .bytes()
+                    .filter(|b| *b == b'\n')
+                    .count()
+                    + 1;
+                match crate::normalize::repair_value_line(src, line) {
+                    Some(fixed) => {
+                        return parse_lenient(&fixed);
+                    }
+                    None => return Err(e),
+                }
+            }
             other => return other,
         }
     }
     biblatex::Bibliography::parse(src)
+}
+
+/// Remove `@PREAMBLE{...}` blocks, which are BibTeX's way of putting raw TeX in the
+/// `.bbl` header. biblatex has no use for them and biber drops them with a warning, so the
+/// only thing keeping them would do is stop the file being read at all.
+pub(crate) fn strip_preamble(src: &str) -> String {
+    let lower = src.to_ascii_lowercase();
+    let mut out = String::with_capacity(src.len());
+    let mut from = 0usize;
+    while let Some(pos) = lower[from..].find("@preamble") {
+        let start = from + pos;
+        out.push_str(&src[from..start]);
+        let Some(open) = src[start..].find('{').map(|i| start + i) else {
+            from = src.len();
+            break;
+        };
+        let mut depth = 0usize;
+        let mut end = src.len();
+        let mut quoted = false;
+        let mut escaped = false;
+        for (i, c) in src[open..].char_indices() {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match c {
+                '\\' => escaped = true,
+                '"' if depth == 1 => quoted = !quoted,
+                '{' if !quoted => depth += 1,
+                '}' if !quoted => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = open + i + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        from = end;
+    }
+    out.push_str(&src[from.min(src.len())..]);
+    out
 }
 
 /// Whether the `crossref` graph contains a loop.

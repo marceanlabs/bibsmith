@@ -341,7 +341,8 @@ pub struct RawEntryView {
 
 /// Every entry, with its fields exactly as written.
 pub fn raw_entries(src: &str) -> Result<Vec<RawEntryView>, biblatex::ParseError> {
-    let raw = RawBibliography::parse(src)?;
+    let stripped = crate::strip_preamble(src);
+    let raw = RawBibliography::parse(&stripped)?;
     Ok(raw
         .entries
         .iter()
@@ -461,13 +462,215 @@ pub fn macro_table(src: &str) -> HashMap<String, String> {
     table
 }
 
+/// Rewrite one line whose value BibTeX accepts and biblatex's parser does not.
+///
+/// Two forms, both legal BibTeX and both found in files old enough to predate biblatex:
+/// a bare abbreviation as the whole value (`month = mar`) and pieces joined by `#`
+/// (`title = "Proc. Fifteenth Annual" # STOC`). The repair expands the abbreviation and
+/// joins the pieces, which is what BibTeX would have done with them.
+pub fn repair_value_line(src: &str, line: usize) -> Option<String> {
+    let mut lines: Vec<String> = src.split_inclusive('\n').map(str::to_string).collect();
+    let target = lines.get(line.checked_sub(1)?)?.clone();
+    let (name, rest) = target.split_once('=')?;
+    let value = rest.trim();
+    let value = value.strip_suffix(',').unwrap_or(value).trim();
+    if value.is_empty() || value.starts_with("@{") {
+        return None;
+    }
+    let joined = value.contains('#');
+    let bare = !value.starts_with('{')
+        && !value.starts_with('"')
+        && value
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic())
+        && value.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-');
+    // A third form: a date hidden behind a TeX command. `year = "{\noopsort{1973b}}1973"`
+    // is BibTeX idiom for "sort on 1973b, print 1973", and the parser cannot turn it into
+    // a number. What is left after the command is removed is the year to print.
+    if !(joined || bare) && value.contains('\\') {
+        let cleaned = strip_tex_commands(value);
+        if cleaned.is_empty() || cleaned == value {
+            return None;
+        }
+        lines[line - 1] = format!("{name}= {{{cleaned}}},\n");
+        return Some(lines.concat());
+    }
+    if !(joined || bare) {
+        return None;
+    }
+    let macros = macro_table(src);
+    let mut out = String::new();
+    for piece in value.split('#') {
+        let piece = piece.trim();
+        if piece.is_empty() {
+            continue;
+        }
+        if let Some(inner) = piece.strip_prefix('"').and_then(|p| p.strip_suffix('"')) {
+            out.push_str(inner);
+        } else if piece.starts_with('{') && piece.ends_with('}') && piece.len() >= 2 {
+            out.push_str(&piece[1..piece.len() - 1]);
+        } else {
+            let key = piece.to_ascii_lowercase();
+            out.push_str(macros.get(&key).map(String::as_str).unwrap_or(piece));
+        }
+    }
+    lines[line - 1] = format!("{name}= {{{out}}},\n");
+    Some(lines.concat())
+}
+
+/// The text of every `@PREAMBLE` block, joined.
+///
+/// BibTeX's `@PREAMBLE` is a header of raw TeX the `.bib` author wants in the `.bbl`.
+/// biblatex has no use for it while reading, but biber copies it into the file it writes,
+/// and without it a `\noopsort` in a year field is an undefined command and the document
+/// will not build.
+pub fn preamble_text(src: &str) -> String {
+    let macros = macro_table(src);
+    let lower = src.to_ascii_lowercase();
+    let mut out = String::new();
+    let mut from = 0usize;
+    while let Some(pos) = lower[from..].find("@preamble") {
+        let start = from + pos;
+        let Some(open) = src[start..].find('{').map(|i| start + i) else {
+            break;
+        };
+        let mut depth = 0usize;
+        let mut end = src.len();
+        let mut quoted = false;
+        let mut escaped = false;
+        for (i, c) in src[open..].char_indices() {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match c {
+                '\\' => escaped = true,
+                '"' if depth == 1 => quoted = !quoted,
+                '{' if !quoted => depth += 1,
+                '}' if !quoted => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = open + i + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        // BibTeX joins the pieces with `#`, and a `#` inside a quoted string is part of
+        // the TeX (`{ #1 }` is an argument), so the pieces are read one at a time rather
+        // than split on the character.
+        let body: Vec<char> = src[open + 1..end.saturating_sub(1)].chars().collect();
+        let mut i = 0;
+        while i < body.len() {
+            match body[i] {
+                '"' => {
+                    let mut piece = String::new();
+                    i += 1;
+                    while i < body.len() && body[i] != '"' {
+                        piece.push(body[i]);
+                        i += 1;
+                    }
+                    i += 1;
+                    out.push_str(&piece);
+                }
+                '{' => {
+                    let mut depth = 0usize;
+                    let mut piece = String::new();
+                    while i < body.len() {
+                        match body[i] {
+                            '{' => {
+                                depth += 1;
+                                if depth > 1 {
+                                    piece.push('{');
+                                }
+                            }
+                            '}' => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    i += 1;
+                                    break;
+                                }
+                                piece.push('}');
+                            }
+                            c => piece.push(c),
+                        }
+                        i += 1;
+                    }
+                    out.push_str(&piece);
+                }
+                c if c.is_alphanumeric() || c == '_' || c == '-' => {
+                    let mut word = String::new();
+                    while i < body.len()
+                        && (body[i].is_alphanumeric() || body[i] == '_' || body[i] == '-')
+                    {
+                        word.push(body[i]);
+                        i += 1;
+                    }
+                    let key = word.to_ascii_lowercase();
+                    out.push_str(macros.get(&key).map(String::as_str).unwrap_or(&word));
+                }
+                _ => i += 1,
+            }
+        }
+        from = end;
+        if from >= src.len() {
+            break;
+        }
+    }
+    out
+}
+
+/// Remove every `\command{...}` from a value and then the braces around the rest.
+pub(crate) fn strip_tex_commands(value: &str) -> String {
+    let chars: Vec<char> = value.trim().trim_matches('"').chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\\' {
+            // Skip the command name and, if it has one, its braced argument.
+            i += 1;
+            while i < chars.len() && chars[i].is_ascii_alphabetic() {
+                i += 1;
+            }
+            if i < chars.len() && chars[i] == '{' {
+                let mut depth = 0usize;
+                while i < chars.len() {
+                    match chars[i] {
+                        '{' => depth += 1,
+                        '}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                i += 1;
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                    i += 1;
+                }
+            }
+            continue;
+        }
+        if chars[i] != '{' && chars[i] != '}' {
+            out.push(chars[i]);
+        }
+        i += 1;
+    }
+    out.trim().to_string()
+}
+
 /// A `@string` value: pieces joined by `#`, each either quoted, braced or a bare word.
 fn unquote_concatenation(value: &str) -> String {
     let mut out = String::new();
     for piece in value.split('#') {
         let piece = piece.trim().trim_end_matches(',');
-        let inner = piece.trim_matches('"');
-        let inner = inner.trim();
+        // The text inside the quotes is what the author meant, spaces included: a house
+        // macro that opens with a space (`" Symposium on …"`) is joined onto the title,
+        // and trimming it prints `AnnualSymposium`.
+        let inner = piece.trim();
+        let inner = inner.strip_prefix('"').and_then(|i| i.strip_suffix('"')).unwrap_or(inner);
         let inner = if inner.starts_with('{') && inner.ends_with('}') && inner.len() >= 2 {
             &inner[1..inner.len() - 1]
         } else {
@@ -483,6 +686,9 @@ fn unquote_concatenation(value: &str) -> String {
 /// Expansion is one level of lookup applied recursively: `@string{a = b # "x"}` where
 /// `b` is another abbreviation resolves all the way down.
 pub fn raw_expanded_entries(src: &str) -> Result<Vec<RawEntryView>, biblatex::ParseError> {
+    // `@PREAMBLE` is BibTeX's raw TeX header and biblatex has no use for it: the parser
+    // stops on it, so it goes before anything reads the file.
+    let src = &crate::strip_preamble(src);
     let macros = macro_table(src);
     let raw = RawBibliography::parse(src)?;
     Ok(raw

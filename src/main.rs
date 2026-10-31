@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use bibsmith::{
     ControlFile, Database, disambiguate, normalise_all, scheme_or_default, sort_entries,
-    normalise_all_with, suffix_for, write_bbl_scoped, write_raw,
+    normalise_all_with, suffix_for, write_bbl_full, write_raw,
 };
 use clap::{Parser, Subcommand};
 
@@ -403,7 +403,13 @@ fn run(cli: Cli) -> Result<(), String> {
                     disambiguate(&entries, scheme)
                 })
                 .collect();
-            let text = write_bbl_scoped(&ctl, &sections, &extras_by_section, &labels);
+            let text = write_bbl_full(
+                &ctl,
+                &sections,
+                &extras_by_section,
+                &labels,
+                &bibsmith::normalize::preamble_text(&src),
+            );
 
             let dest = out.unwrap_or_else(|| bcf.with_extension("bbl"));
             std::fs::write(&dest, text).map_err(|e| format!("{}: {e}", dest.display()))?;
