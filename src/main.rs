@@ -159,13 +159,25 @@ fn run(cli: Cli) -> Result<(), String> {
             let normalised = normalise_all(&src).map_err(|e| format!("{}: {e}", file.display()))?;
             let total = normalised.len();
             let mut changed = 0usize;
+            let mut renames = 0usize;
             for entry in &normalised {
-                if !entry.dropped.is_empty() {
-                    changed += 1;
-                    println!("{}: {}", entry.key, entry.dropped.join(", "));
+                if entry.renamed.is_empty() && entry.dropped.is_empty() {
+                    continue;
                 }
+                changed += 1;
+                renames += entry.renamed.len();
+                let mut parts: Vec<String> = Vec::new();
+                for (from, to) in &entry.renamed {
+                    parts.push(format!("{from} -> {to}"));
+                }
+                for drop in &entry.dropped {
+                    parts.push(format!("{drop} (not written)"));
+                }
+                println!("{}: {}", entry.key, parts.join(", "));
             }
-            println!("{changed} of {total} entries have a field biber would rename or drop");
+            println!(
+                "{changed} of {total} entries change under --normalise ({renames} field renames)"
+            );
             Ok(())
         }
     }

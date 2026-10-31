@@ -168,8 +168,13 @@ fn check_reports_and_changes_nothing() {
     assert_eq!(before, after, "check must not write");
 
     let report = String::from_utf8_lossy(&out.stdout);
+    // 12 of the 92 entries have a legacy field name that --normalise renames.
     assert!(
-        report.contains("entries have a field biber would rename or drop"),
+        report.contains("12 of 92 entries change under --normalise"),
         "{report}"
+    );
+    assert!(
+        report.contains("year -> date"),
+        "the rename must be shown: {report}"
     );
 }

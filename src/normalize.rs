@@ -50,6 +50,8 @@ pub struct RawNormalised {
     pub key: String,
     /// name, value, and whether the value was an abbreviation reference.
     pub fields: Vec<(String, String, bool)>,
+    /// Fields whose name changes, as (what the author wrote, what biber writes).
+    pub renamed: Vec<(String, String)>,
     pub dropped: Vec<String>,
 }
 
@@ -147,6 +149,7 @@ fn render(value: &[Spanned<RawChunk<'_>>]) -> (String, bool) {
 
 pub fn normalise_raw(entry: &RawEntry<'_>) -> RawNormalised {
     let mut fields: Vec<(String, String, bool)> = Vec::new();
+    let mut renamed: Vec<(String, String)> = Vec::new();
     let mut dropped: Vec<String> = Vec::new();
 
     for pair in &entry.fields {
@@ -166,6 +169,9 @@ pub fn normalise_raw(entry: &RawEntry<'_>) -> RawNormalised {
             dropped.push(format!("{original} (duplicate of {target})"));
             continue;
         }
+        if target != original {
+            renamed.push((original.clone(), target.clone()));
+        }
         let (raw_text, abbreviation) = render(&pair.value.v);
         // biber joins a value that was wrapped over several lines into one line
         // and collapses the indentation, so every value gets the same treatment.
@@ -181,6 +187,7 @@ pub fn normalise_raw(entry: &RawEntry<'_>) -> RawNormalised {
         kind: entry.kind.v.to_ascii_lowercase(),
         key: entry.key.v.to_string(),
         fields,
+        renamed,
         dropped,
     }
 }
