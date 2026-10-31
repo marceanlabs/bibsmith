@@ -322,3 +322,16 @@ fn first_set_member<'a>(
     let first = raw.split(',').next()?.trim().to_string();
     db.get(first.as_str()).copied()
 }
+
+/// Order entries by a string key, collated the same way the sort key is.
+///
+/// The `alphabetic` style sorts by the label itself rather than by name and year, so
+/// the order comes from `labelalpha` and everything else is the tiebreak.
+pub fn collated_sort(items: Vec<(String, &Entry)>) -> Vec<&Entry> {
+    let locale: icu_locale::Locale = "en-US".parse().expect("en-US parses");
+    let collator = Collator::try_new(locale.into(), CollatorOptions::default())
+        .expect("compiled-in collation data");
+    let mut keyed = items;
+    keyed.sort_by(|a, b| collator.compare(&a.0, &b.0));
+    keyed.into_iter().map(|(_, e)| e).collect()
+}

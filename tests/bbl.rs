@@ -47,7 +47,7 @@ fn render(pairs: &[(&str, &str)], bcf: &str) -> String {
     let effective = load(pairs);
     let refs: Vec<&bibsmith::merge::Effective> = effective.iter().collect();
     let extras = HashMap::new();
-    write_bbl(&ctl, &refs, &extras)
+    write_bbl(&ctl, &refs, &extras, &HashMap::new())
 }
 
 #[test]
@@ -154,7 +154,7 @@ fn ampersands_are_escaped_so_they_print() {
     let eff = bibsmith::merge::effective(&db, entry, &raw);
     let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
     let ctl = ControlFile::parse(&xml).unwrap();
-    let bbl = write_bbl(&ctl, &[&eff], &HashMap::new());
+    let bbl = write_bbl(&ctl, &[&eff], &HashMap::new(), &HashMap::new());
     assert!(
         bbl.contains("Computers \\& Typesetting"),
         "an unescaped & drops the rest of the line from the page"
@@ -177,7 +177,7 @@ fn a_url_date_becomes_url_parts() {
     let eff = bibsmith::merge::effective(&db, db.get("ctan").unwrap(), &raw);
     let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
     let ctl = ControlFile::parse(&xml).unwrap();
-    let bbl = write_bbl(&ctl, &[&eff], &HashMap::new());
+    let bbl = write_bbl(&ctl, &[&eff], &HashMap::new(), &HashMap::new());
     assert!(bbl.contains("\\field{urlyear}{2006}"));
     assert!(bbl.contains("\\field{urlmonth}{10}"));
     assert!(bbl.contains("\\field{urlday}{1}"));
@@ -198,7 +198,7 @@ fn a_date_range_becomes_a_start_and_an_end() {
     let eff = bibsmith::merge::effective(&db, db.get("r").unwrap(), &raw);
     let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
     let ctl = ControlFile::parse(&xml).unwrap();
-    let bbl = write_bbl(&ctl, &[&eff], &HashMap::new());
+    let bbl = write_bbl(&ctl, &[&eff], &HashMap::new(), &HashMap::new());
     assert!(bbl.contains("\\field{year}{1984}"));
     assert!(
         bbl.contains("\\field{endyear}{1986}"),
@@ -218,4 +218,56 @@ fn order_matches_the_control_files_template() {
         "the template's sort keys are read from the file"
     );
     let _ = sort_entries;
+}
+
+#[test]
+fn alphabetic_labels_match_biber_on_every_entry() {
+    // The fixture is biber's own `labelalpha` for all 86 labelled entries of the
+    // canonical corpus, so this is parity, not plausibility: `GMS94` for three
+    // authors, `Alm+98` for more than three, `Gla61` for one, `vGen09` keeping the
+    // prefix and `KpV` staying bare because a shorthand is final.
+    let fixture = std::fs::read_to_string(oracle("labelalpha-alphabetic.tsv")).expect("fixture");
+    let src = std::fs::read_to_string(oracle("refs.bib")).expect("corpus");
+    let db = biblatex::Bibliography::parse(&src).expect("parse");
+    let raw: HashMap<String, Vec<(String, String)>> =
+        bibsmith::normalize::raw_expanded_entries(&src)
+            .expect("raw")
+            .into_iter()
+            .map(|e| (e.key, e.fields))
+            .collect();
+
+    let mut checked = 0;
+    for line in fixture.lines() {
+        let Some((key, want)) = line.split_once('\t') else {
+            continue;
+        };
+        let entry = db.get(key).expect("cited in the fixture");
+        let eff = bibsmith::merge::effective(&db, entry, &raw);
+        let member = eff
+            .entryset
+            .as_ref()
+            .and_then(|s| s.split(',').next())
+            .map(|k| k.trim().to_string())
+            .and_then(|k| db.get(&k).map(|e| bibsmith::merge::effective(&db, e, &raw)));
+        let got = bibsmith::label::label_alpha_with(&eff, 2, member.as_ref());
+        assert_eq!(got, want, "label for {key}");
+        checked += 1;
+    }
+    assert_eq!(checked, 86);
+}
+
+#[test]
+fn a_repeated_label_is_numbered_from_one() {
+    let labels = vec![
+        "Gao01".to_string(),
+        "Gao01".to_string(),
+        "Gao01".to_string(),
+    ];
+    assert_eq!(
+        bibsmith::label::extra_alpha(&labels),
+        vec![Some(1), Some(2), Some(3)],
+        "biblatex prints 1 as 'a', so the count starts at one"
+    );
+    let unique = vec!["Gla61".to_string()];
+    assert_eq!(bibsmith::label::extra_alpha(&unique), vec![None]);
 }

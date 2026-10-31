@@ -243,12 +243,15 @@ pub fn write_raw(entry: &RawNormalised) -> String {
 ///
 /// The `.bbl` writer needs this rather than the resolved values: biblatex prints
 /// what the author wrote, and `{\TeX}` decoded to `TeX` prints differently.
-pub fn raw_values(src: &str) -> Result<Vec<(String, Vec<(String, String)>)>, biblatex::ParseError> {
+pub fn raw_values(src: &str) -> Result<Vec<KeyedFields>, biblatex::ParseError> {
     Ok(raw_entries(src)?
         .into_iter()
         .map(|e| (e.key, e.fields))
         .collect())
 }
+
+/// A citation key and the fields written for it.
+pub type KeyedFields = (String, Vec<(String, String)>);
 
 /// One entry's author-written fields, typed but not renamed.
 ///

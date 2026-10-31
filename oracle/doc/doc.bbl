@@ -54,6 +54,8 @@
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{dateera}{ce}
+      \field{labelalpha}{BL04}
+      \field{extraalpha}{1}
       \field{extradate}{1}
       \field{extradatescope}{labelyear}
     \endentry
@@ -90,6 +92,8 @@
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{dateera}{ce}
+      \field{labelalpha}{BL04}
+      \field{extraalpha}{2}
       \field{extradate}{2}
       \field{extradatescope}{labelyear}
     \endentry
@@ -123,6 +127,7 @@
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{dateera}{ce}
+      \field{labelalpha}{Knu84}
     \endentry
     \entry{westfahl:space}{incollection}{}{}
       \name{author}{1}{}{%
@@ -171,6 +176,7 @@
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{dateera}{ce}
+      \field{labelalpha}{Wes00}
     \endentry
     \entry{westfahl:frontier}{collection}{}{}
       \name{editor}{2}{}{%
@@ -209,6 +215,7 @@
       \field{labelnamesource}{editor}
       \field{labeltitlesource}{title}
       \field{dateera}{ce}
+      \field{labelalpha}{WS00}
     \endentry
   \enddatalist
 \endrefsection

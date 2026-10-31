@@ -197,7 +197,7 @@ pub fn effective(
         .collect();
     let mut names: Vec<(String, Vec<Person>)> = Vec::new();
     for field in NAME_FIELDS {
-        if let Ok(people) = entry.get_as::<Vec<Person>>(*field) {
+        if let Ok(people) = entry.get_as::<Vec<Person>>(field) {
             if !people.is_empty() {
                 names.push((field.to_string(), people));
             }
@@ -205,7 +205,7 @@ pub fn effective(
     }
     let entryset = entry
         .get("entryset")
-        .map(|c| crate::normalize::render_value(c));
+        .map(crate::normalize::render_value);
 
     let mut child_kind = kind_of(entry);
     let mut seen: Vec<String> = vec![entry.key.clone()];
@@ -256,7 +256,7 @@ pub fn effective(
             if names.iter().any(|(k, _)| k == field) {
                 continue;
             }
-            if let Ok(people) = parent.get_as::<Vec<Person>>(*field) {
+            if let Ok(people) = parent.get_as::<Vec<Person>>(field) {
                 if !people.is_empty() {
                     names.push((field.to_string(), people));
                 }

@@ -181,13 +181,15 @@ fn run(cli: Cli) -> Result<(), String> {
 
             // Order follows the template named in the .bcf: the document says how it
             // wants its bibliography sorted, so there is nothing to guess.
+            // `anyt` is the alphabetic template: the same name-year-title order, with
+            // the label sorted first (handled below).
             let scheme = match ctl.sorting_template.as_str() {
-                "nyt" => bibsmith::Scheme::Nyt,
+                "nyt" | "anyt" => bibsmith::Scheme::Nyt,
                 "nty" => bibsmith::Scheme::Nty,
                 "ynt" => bibsmith::Scheme::Ynt,
                 other => {
                     return Err(format!(
-                        "sorting template {other:?} is not implemented; this build knows nyt, nty and ynt"
+                        "sorting template {other:?} is not implemented; this build knows nyt, nty, ynt and anyt"
                     ));
                 }
             };
@@ -207,8 +209,75 @@ fn run(cli: Cli) -> Result<(), String> {
                 .iter()
                 .map(|entry| bibsmith::merge::effective(&db, entry, &raw))
                 .collect();
-            let refs: Vec<&bibsmith::merge::Effective> = effective.iter().collect();
-            let text = write_bbl(&ctl, &refs, &extras);
+            let by_key: HashMap<&str, &bibsmith::merge::Effective> =
+                effective.iter().map(|e| (e.key.as_str(), e)).collect();
+
+            // The alphabetic label, and the label order the `anyt` template asks for:
+            // it sorts by the label first, which is why `jcg` sits before `Almendro`.
+            // Set members are not labelled: they carry the set's label, and counting
+            // them makes the set look like a duplicate of itself (`Her+06a`).
+            let member_keys: std::collections::HashSet<String> = effective
+                .iter()
+                .filter_map(|e| e.entryset.as_ref())
+                .flat_map(|set| set.split(',').map(|k| k.trim().to_string()))
+                .collect();
+
+            let mut labels: HashMap<String, (String, Option<u8>)> = HashMap::new();
+            let mut labelled: Vec<(String, &bibsmith::merge::Effective)> = Vec::new();
+            for entry in effective.iter().filter(|e| !member_keys.contains(&e.key)) {
+                let member = entry
+                    .entryset
+                    .as_ref()
+                    .and_then(|s| s.split(',').next())
+                    .map(|k| k.trim())
+                    .and_then(|k| by_key.get(k).copied());
+                let label = bibsmith::label::label_alpha_with(entry, 2, member);
+                labelled.push((label.clone(), entry));
+                labels.insert(entry.key.clone(), (label, None));
+            }
+            let sequence: Vec<String> = labelled.iter().map(|(l, _)| l.clone()).collect();
+            // Numbers follow bibliography order, so they are assigned from the same
+            // sequence they were counted from, never from a map's iteration order.
+            let extras_alpha = bibsmith::label::extra_alpha(&sequence);
+            for ((_, entry), extra) in labelled.iter().zip(extras_alpha) {
+                if let Some((_, slot)) = labels.get_mut(&entry.key) {
+                    *slot = extra;
+                }
+            }
+
+            let sort_by_label =
+                ctl.sorts.iter().flat_map(|g| g.items.iter()).any(
+                    |item| matches!(item, bibsmith::bcf::SortItem::Field(f) if f == "labelalpha"),
+                );
+
+            let refs: Vec<&bibsmith::merge::Effective> = if sort_by_label {
+                // `collated_sort` is stable, so the name-year-title order stays as the
+                // tiebreak for two entries with the same label.
+                let labels_for: HashMap<&str, &str> = labelled
+                    .iter()
+                    .map(|(l, e)| (e.key.as_str(), l.as_str()))
+                    .collect();
+                let keyed: Vec<(String, &biblatex::Entry)> = ordered
+                    .iter()
+                    .map(|e| {
+                        (
+                            labels_for
+                                .get(e.key.as_str())
+                                .copied()
+                                .unwrap_or("")
+                                .to_string(),
+                            *e,
+                        )
+                    })
+                    .collect();
+                bibsmith::sort::collated_sort(keyed)
+                    .into_iter()
+                    .filter_map(|e| by_key.get(e.key.as_str()).copied())
+                    .collect()
+            } else {
+                effective.iter().collect()
+            };
+            let text = write_bbl(&ctl, &refs, &extras, &labels);
 
             let dest = out.unwrap_or_else(|| bcf.with_extension("bbl"));
             std::fs::write(&dest, text).map_err(|e| format!("{}: {e}", dest.display()))?;

@@ -12,6 +12,7 @@
 pub mod bbl;
 pub mod bcf;
 pub mod disambiguate;
+pub mod label;
 pub mod merge;
 pub mod normalize;
 pub mod sort;

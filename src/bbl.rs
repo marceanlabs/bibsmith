@@ -110,9 +110,11 @@ fn name_block(field_name: &str, people: &[Person]) -> String {
             initials(&p.name, "\\bibinitperiod")
         ));
         if !p.given_name.is_empty() {
-            // Parts of a given name are joined with `\bibnamedelima`, as biber writes
-            // them: a plain space breaks lines in different places.
-            let given = p.given_name.replace(' ', "\\bibnamedelima ");
+            // Parts of a given name are joined the way biber joins them: after an
+            // initial (a part ending in a full stop) it uses the thin `\bibnamedelimi`,
+            // after a word the wider `\bibnamedelima`. One space for both reflows the
+            // page: "G. E. L. Owen" breaks in the wrong place.
+            let given = join_given_parts(&p.given_name);
             out.push_str(&format!("           given={{{given}}},\n"));
             out.push_str(&format!(
                 "           giveni={{{}}},\n",
@@ -149,6 +151,24 @@ fn escape_ampersands(value: &str) -> String {
         } else {
             out.push(c);
         }
+    }
+    out
+}
+
+/// Join the parts of a given name with the delimiter biblatex expects between them.
+fn join_given_parts(given: &str) -> String {
+    let parts: Vec<&str> = given.split_whitespace().collect();
+    let mut out = String::new();
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            let previous = parts[i - 1];
+            if previous.ends_with('.') {
+                out.push_str("\\bibnamedelimi ");
+            } else {
+                out.push_str("\\bibnamedelima ");
+            }
+        }
+        out.push_str(part);
     }
     out
 }
@@ -227,6 +247,7 @@ pub fn write_bbl(
     ctl: &ControlFile,
     ordered: &[&Effective],
     extras: &HashMap<String, u8>,
+    labels: &HashMap<String, (String, Option<u8>)>,
 ) -> String {
     // A `@set` prints its members inline after itself, so they leave the main flow.
     let mut members: HashMap<&str, Vec<&str>> = HashMap::new();
@@ -285,6 +306,7 @@ pub fn write_bbl(
                 ctl,
                 entry,
                 extras,
+                labels,
                 Some(
                     member_of
                         .get(entry.key.as_str())
@@ -305,7 +327,7 @@ pub fn write_bbl(
         } else {
             None
         };
-        write_entry(&mut out, ctl, entry, extras, inset, "");
+        write_entry(&mut out, ctl, entry, extras, labels, inset, "");
     }
 
     out.push_str("  \\enddatalist\n");
@@ -314,11 +336,13 @@ pub fn write_bbl(
     out
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_entry(
     out: &mut String,
     ctl: &ControlFile,
     entry: &Effective,
     extras: &HashMap<String, u8>,
+    labels: &HashMap<String, (String, Option<u8>)>,
     inset: Option<&str>,
     options: &str,
 ) {
@@ -468,6 +492,17 @@ fn write_entry(
     };
     field(out, "labeltitlesource", title_source);
     field(out, "dateera", "ce");
+
+    // The alphabetic label, and the number that disambiguates a repeated one:
+    // biblatex prints the letter itself from the number.
+    if let Some((label, extra)) = labels.get(&entry.key) {
+        if !label.is_empty() {
+            field(out, "labelalpha", label);
+        }
+        if let Some(n) = extra {
+            field(out, "extraalpha", &n.to_string());
+        }
+    }
 
     if let Some(n) = extras.get(&entry.key) {
         field(out, "extradate", &n.to_string());
