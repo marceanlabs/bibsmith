@@ -179,3 +179,35 @@ parent. The typeset pages are identical, so this is not chased further.
 makes our output differ from biber's means the parity tests stop proving equality, which
 is the only evidence this project has. A user who wants different behaviour is asking for
 a different tool.
+
+## `nyvt`: what biber actually does with `volume`
+
+Measured on fixtures in `/tmp/nv2`, each with one variable changed:
+
+| Entries | biber's order |
+|---|---|
+| volumes 1, 2, 3 | 1, 2, 3 — the numbers decide |
+| volumes A, B, C, D, E, all else equal | C, D, A, B, E |
+| volumes Alpha, Beta, Gamma, all else equal | input order, both ways round |
+| volume C + sorttitle "Aye" vs volume B + sorttitle "Zed" | Aye first — the title decided, not the volume |
+
+Two facts, and they do not agree with each other:
+
+1. a non-numeric `volume` does not order entries. With distinct sorttitles the title
+   decides even when the volume says the opposite, so a letter volume is being dropped
+   somewhere between the field and the comparison
+2. with every slot tied, the order biber produces is deterministic but is neither the input
+   order nor any collation of the values — `C, D, A, B, E` for entries in `A…E` order
+
+That second fact is the tie order of a Perl hash, and no amount of reading the template
+reproduces it. Our reader follows the template literally: name, year, volume, title, with
+`volume` compared as text.
+
+The real corpus disagrees in the same place for the same reason: the five Knuth volumes
+come out `a, c, d, b, e` from biber against `a, b, c, d, e` from the template. `a` is 1984
+and sorts first on its year; the other four share 1986 and tie on name and year, so
+whatever decides them is the same unexplained tie-break.
+
+Until that is settled, `oracle/style-nyvt.tex` stays a known difference rather than a
+passing test. Nothing else depends on it: `nyt`, `nty` and `anyt` are identical to biber on
+every entry.
