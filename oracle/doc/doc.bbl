@@ -1,0 +1,215 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated
+% by bibsmith as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{nyt/global//global/global/global}
+    \entry{baez/online}{online}{}{}
+      \name{author}{2}{}{%
+        {{un=0,uniquepart=base,hash=0928e944609dcd46bbab2012161c693e}{%
+           family={Baez},
+           familyi={B\bibinitperiod},
+           given={John C.},
+           giveni={J\bibinitperiod\bibinitdelim C\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=7822dbf70b8f44c7433c43b354d3319b}{%
+           family={Lauda},
+           familyi={L\bibinitperiod},
+           given={Aaron D.},
+           giveni={A\bibinitperiod\bibinitdelim D\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{fullhash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{fullhashraw}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{bibnamehash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{authorbibnamehash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{authornamehash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{authorfullhash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{authorfullhashraw}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \field{sortinit}{H}
+      \field{title}{Higher-Dimensional Algebra {V}: 2-Groups}
+      \verb{url}
+      \verb https://arxiv.org/abs/math/0307200
+      \endverb
+      \field{year}{2004}
+      \field{month}{10}
+      \field{day}{27}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{dateera}{ce}
+      \field{extradate}{1}
+      \field{extradatescope}{labelyear}
+    \endentry
+    \entry{baez/article}{article}{}{}
+      \name{author}{2}{}{%
+        {{un=0,uniquepart=base,hash=0928e944609dcd46bbab2012161c693e}{%
+           family={Baez},
+           familyi={B\bibinitperiod},
+           given={John C.},
+           giveni={J\bibinitperiod\bibinitdelim C\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=7822dbf70b8f44c7433c43b354d3319b}{%
+           family={Lauda},
+           familyi={L\bibinitperiod},
+           given={Aaron D.},
+           giveni={A\bibinitperiod\bibinitdelim D\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{fullhash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{fullhashraw}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{bibnamehash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{authorbibnamehash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{authornamehash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{authorfullhash}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \strng{authorfullhashraw}{d7ac2e7cea7f23664d497eaa9d95d044}
+      \field{sortinit}{H}
+      \field{title}{Higher-Dimensional Algebra {V}: 2-Groups}
+      \field{journaltitle}{Theory and Applications of Categories}
+      \field{volume}{12}
+      \field{pages}{423--491}
+      \field{year}{2004}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{dateera}{ce}
+      \field{extradate}{2}
+      \field{extradatescope}{labelyear}
+    \endentry
+    \entry{knuth:ct}{book}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=187ae2c9217ec3f048f5f736fd1daea7}{%
+           family={Knuth},
+           familyi={K\bibinitperiod},
+           given={Donald E.},
+           giveni={D\bibinitperiod\bibinitdelim E\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{187ae2c9217ec3f048f5f736fd1daea7}
+      \strng{fullhash}{187ae2c9217ec3f048f5f736fd1daea7}
+      \strng{fullhashraw}{187ae2c9217ec3f048f5f736fd1daea7}
+      \strng{bibnamehash}{187ae2c9217ec3f048f5f736fd1daea7}
+      \strng{authorbibnamehash}{187ae2c9217ec3f048f5f736fd1daea7}
+      \strng{authornamehash}{187ae2c9217ec3f048f5f736fd1daea7}
+      \strng{authorfullhash}{187ae2c9217ec3f048f5f736fd1daea7}
+      \strng{authorfullhashraw}{187ae2c9217ec3f048f5f736fd1daea7}
+      \field{sortinit}{T}
+      \field{title}{The {\TeX}book}
+      \list{publisher}{1}{%
+        {Addison-Wesley}%
+      }
+      \list{location}{1}{%
+        {Reading, Mass.}%
+      }
+      \field{year}{1984}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{dateera}{ce}
+    \endentry
+    \entry{westfahl:space}{incollection}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=1a4ad189403b716f65097e984d1891c5}{%
+           family={Westfahl},
+           familyi={W\bibinitperiod},
+           given={Gary},
+           giveni={G\bibinitperiod},
+           givenun=0}}%
+      }
+      \name{editor}{2}{}{%
+        {{un=0,uniquepart=base,hash=1a4ad189403b716f65097e984d1891c5}{%
+           family={Westfahl},
+           familyi={W\bibinitperiod},
+           given={Gary},
+           giveni={G\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=9fcab4cc6c9eb813c9c9e4122abc4abb}{%
+           family={Slusser},
+           familyi={S\bibinitperiod},
+           given={George},
+           giveni={G\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{1a4ad189403b716f65097e984d1891c5}
+      \strng{fullhash}{1a4ad189403b716f65097e984d1891c5}
+      \strng{fullhashraw}{1a4ad189403b716f65097e984d1891c5}
+      \strng{bibnamehash}{1a4ad189403b716f65097e984d1891c5}
+      \strng{authorbibnamehash}{1a4ad189403b716f65097e984d1891c5}
+      \strng{authornamehash}{1a4ad189403b716f65097e984d1891c5}
+      \strng{authorfullhash}{1a4ad189403b716f65097e984d1891c5}
+      \strng{authorfullhashraw}{1a4ad189403b716f65097e984d1891c5}
+      \field{sortinit}{T}
+      \field{title}{The True Frontier}
+      \field{pages}{55--65}
+      \field{booktitle}{Space and Beyond}
+      \field{booksubtitle}{The Frontier Theme in Science Fiction}
+      \list{publisher}{1}{%
+        {Greenwood Press}%
+      }
+      \list{location}{1}{%
+        {Westport, Conn.}%
+      }
+      \field{year}{2000}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{dateera}{ce}
+    \endentry
+    \entry{westfahl:frontier}{collection}{}{}
+      \name{editor}{2}{}{%
+        {{un=0,uniquepart=base,hash=1a4ad189403b716f65097e984d1891c5}{%
+           family={Westfahl},
+           familyi={W\bibinitperiod},
+           given={Gary},
+           giveni={G\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=9fcab4cc6c9eb813c9c9e4122abc4abb}{%
+           family={Slusser},
+           familyi={S\bibinitperiod},
+           given={George},
+           giveni={G\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{9677881dc022ae175d5da5511c3e1a0e}
+      \strng{fullhash}{9677881dc022ae175d5da5511c3e1a0e}
+      \strng{fullhashraw}{9677881dc022ae175d5da5511c3e1a0e}
+      \strng{bibnamehash}{9677881dc022ae175d5da5511c3e1a0e}
+      \strng{authorbibnamehash}{9677881dc022ae175d5da5511c3e1a0e}
+      \strng{authornamehash}{9677881dc022ae175d5da5511c3e1a0e}
+      \strng{authorfullhash}{9677881dc022ae175d5da5511c3e1a0e}
+      \strng{authorfullhashraw}{9677881dc022ae175d5da5511c3e1a0e}
+      \field{sortinit}{S}
+      \field{title}{Space and Beyond}
+      \field{subtitle}{The Frontier Theme in Science Fiction}
+      \list{publisher}{1}{%
+        {Greenwood Press}%
+      }
+      \list{location}{1}{%
+        {Westport, Conn.}%
+      }
+      \field{year}{2000}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{editor}
+      \field{labeltitlesource}{title}
+      \field{dateera}{ce}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput

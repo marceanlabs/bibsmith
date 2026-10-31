@@ -10,6 +10,8 @@
 //! Measured against `biber --tool` on the canonical corpus: 92 of 92 entries
 //! identical once these rules are applied.
 
+use std::collections::HashMap;
+
 use biblatex::{RawBibliography, RawChunk, RawEntry, Spanned};
 
 /// A rename biber performs silently. Old `.bib` name on the left, what biber
@@ -42,6 +44,17 @@ const COMPUTED: &[&str] = &[];
 
 /// Fields whose value biber re-punctuates as a numeric range.
 const RANGES: &[&str] = &["pages", "pageref", "pagetotal"];
+
+/// What biber calls this field, if it renames it.
+///
+/// The `.bbl` writer needs the same table: an entry that says `journal` must reach
+/// biblatex as `journaltitle`, or the style prints "In: 4.3" with no journal name.
+pub fn renamed_field(name: &str) -> Option<&'static str> {
+    RENAMES
+        .iter()
+        .find(|(from, _)| *from == name)
+        .map(|(_, to)| *to)
+}
 
 /// One entry, normalised, ready to write.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,8 +102,14 @@ pub fn normalise_range(value: &str) -> String {
             out.push(c);
         } else if c == ',' {
             out.push(',');
+            let mut skipped = false;
             while chars.get(i + 1).is_some_and(|n| *n == ' ' || *n == '\n') {
                 i += 1;
+                skipped = true;
+            }
+            // The space after a comma is part of how the range prints: "431–456, 791–798".
+            if skipped {
+                out.push(' ');
             }
         } else if c == '\n' {
             out.push(' ');
@@ -220,8 +239,232 @@ pub fn write_raw(entry: &RawNormalised) -> String {
     out
 }
 
+/// Every entry's fields exactly as the author wrote them, keyed by citation key.
+///
+/// The `.bbl` writer needs this rather than the resolved values: biblatex prints
+/// what the author wrote, and `{\TeX}` decoded to `TeX` prints differently.
+pub fn raw_values(src: &str) -> Result<Vec<(String, Vec<(String, String)>)>, biblatex::ParseError> {
+    Ok(raw_entries(src)?
+        .into_iter()
+        .map(|e| (e.key, e.fields))
+        .collect())
+}
+
+/// One entry's author-written fields, typed but not renamed.
+///
+/// The `.bbl` writer and `crossref` resolution both work from this: biblatex prints
+/// the author's own field names and values, so neither wants the normalised form.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawEntryView {
+    pub key: String,
+    pub kind: String,
+    pub fields: Vec<(String, String)>,
+}
+
+/// Every entry, with its fields exactly as written.
+pub fn raw_entries(src: &str) -> Result<Vec<RawEntryView>, biblatex::ParseError> {
+    let raw = RawBibliography::parse(src)?;
+    Ok(raw
+        .entries
+        .iter()
+        .map(|e| RawEntryView {
+            kind: e.v.kind.v.to_ascii_lowercase(),
+            key: e.v.key.v.to_string(),
+            fields: e
+                .v
+                .fields
+                .iter()
+                .map(|p| {
+                    let (text, _) = render(&p.value.v);
+                    (p.key.v.to_ascii_lowercase(), text)
+                })
+                .collect(),
+        })
+        .collect())
+}
+
 /// The whole database, normalised, in source order.
 pub fn normalise_all(src: &str) -> Result<Vec<RawNormalised>, biblatex::ParseError> {
     let raw = RawBibliography::parse(src)?;
     Ok(raw.entries.iter().map(|e| normalise_raw(&e.v)).collect())
+}
+
+/// Render a field value for the `.bbl`, keeping the braces the author wrote.
+///
+/// `format_verbatim` drops them, and that changes the printed page: `{\TeX}` prints
+/// the E in small capitals ("TEX"), plain `\TeX` does not ("TeX"). biber keeps the
+/// braces, so they are kept here too. Macros are already expanded by the time a value
+/// reaches this function, so there is nothing to resolve.
+pub fn render_value(chunks: &[biblatex::Spanned<biblatex::Chunk>]) -> String {
+    let mut out = String::new();
+    let mut prev_was_whitespace = false;
+    for chunk in chunks {
+        match &chunk.v {
+            biblatex::Chunk::Normal(text) => {
+                for mut c in text.chars() {
+                    if c == '\n' || c == '\r' {
+                        if prev_was_whitespace {
+                            continue;
+                        }
+                        c = ' ';
+                    }
+                    out.push(c);
+                    prev_was_whitespace = c.is_whitespace();
+                }
+            }
+            biblatex::Chunk::Verbatim(text) => {
+                out.push('{');
+                out.push_str(text);
+                out.push('}');
+                prev_was_whitespace = false;
+            }
+            biblatex::Chunk::Math(text) => {
+                out.push('$');
+                out.push_str(text);
+                out.push('$');
+                prev_was_whitespace = false;
+            }
+        }
+    }
+    out.trim().to_string()
+}
+
+/// The `@string` table, keyed by lowercased abbreviation name.
+///
+/// The parser resolves abbreviations but the resolved `Entry` loses the braces and
+/// backslashes the author wrote (`{\TeX}` becomes `TeX`, which prints differently), so
+/// the `.bbl` is written from the raw text and expanded here instead.
+pub fn macro_table(src: &str) -> HashMap<String, String> {
+    let mut table: HashMap<String, String> = HashMap::new();
+    let lower = src.to_ascii_lowercase();
+    let mut from = 0usize;
+    while let Some(pos) = lower[from..].find("@string") {
+        let start = from + pos + "@string".len();
+        let Some(open) = src[start..].find('{').map(|i| start + i) else {
+            break;
+        };
+        let mut depth = 1usize;
+        let mut end = open + 1;
+        for (i, c) in src[open + 1..].char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = open + 1 + i;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let body = &src[open + 1..end];
+        if let Some(eq) = body.find('=') {
+            let name = body[..eq].trim().to_ascii_lowercase();
+            let value = unquote_concatenation(body[eq + 1..].trim());
+            if !name.is_empty() {
+                table.insert(name, value);
+            }
+        }
+        from = end.max(start);
+        if from >= src.len() {
+            break;
+        }
+    }
+    table
+}
+
+/// A `@string` value: pieces joined by `#`, each either quoted, braced or a bare word.
+fn unquote_concatenation(value: &str) -> String {
+    let mut out = String::new();
+    for piece in value.split('#') {
+        let piece = piece.trim().trim_end_matches(',');
+        let inner = piece.trim_matches('"');
+        let inner = inner.trim();
+        let inner = if inner.starts_with('{') && inner.ends_with('}') && inner.len() >= 2 {
+            &inner[1..inner.len() - 1]
+        } else {
+            inner
+        };
+        out.push_str(inner);
+    }
+    out
+}
+
+/// Every entry's fields, as written, with abbreviations expanded.
+///
+/// Expansion is one level of lookup applied recursively: `@string{a = b # "x"}` where
+/// `b` is another abbreviation resolves all the way down.
+pub fn raw_expanded_entries(src: &str) -> Result<Vec<RawEntryView>, biblatex::ParseError> {
+    let macros = macro_table(src);
+    let raw = RawBibliography::parse(src)?;
+    Ok(raw
+        .entries
+        .iter()
+        .map(|e| RawEntryView {
+            kind: e.v.kind.v.to_ascii_lowercase(),
+            key: e.v.key.v.to_string(),
+            fields: e
+                .v
+                .fields
+                .iter()
+                .map(|p| {
+                    let value = expand_chunks(&p.value.v, &macros, 0);
+                    (p.key.v.to_ascii_lowercase(), collapse_whitespace(&value))
+                })
+                .collect(),
+        })
+        .collect())
+}
+
+fn expand_chunks(
+    chunks: &[Spanned<RawChunk<'_>>],
+    macros: &HashMap<String, String>,
+    depth: usize,
+) -> String {
+    let mut out = String::new();
+    for chunk in chunks {
+        match &chunk.v {
+            RawChunk::Normal(text) => out.push_str(text),
+            RawChunk::Abbreviation(name) => {
+                let key = name.trim().to_ascii_lowercase();
+                match macros.get(&key) {
+                    Some(value) if depth < 8 => {
+                        out.push_str(&expand_text(value, macros, depth + 1))
+                    }
+                    // An unknown abbreviation stays as written; dropping it would lose
+                    // data, and biber treats an undefined macro as a warning, not a loss.
+                    _ => out.push_str(name.trim()),
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Expand abbreviations inside a `@string` value, which may reference others.
+fn expand_text(value: &str, macros: &HashMap<String, String>, depth: usize) -> String {
+    let mut out = String::new();
+    let mut word = String::new();
+    for c in value.chars() {
+        if c.is_alphanumeric() || c == '_' || c == '-' || c == '.' {
+            word.push(c);
+            continue;
+        }
+        if !word.is_empty() {
+            match macros.get(&word.to_ascii_lowercase()) {
+                Some(v) if depth < 8 => out.push_str(&expand_text(v, macros, depth + 1)),
+                _ => out.push_str(&word),
+            }
+            word.clear();
+        }
+        out.push(c);
+    }
+    if !word.is_empty() {
+        match macros.get(&word.to_ascii_lowercase()) {
+            Some(v) if depth < 8 => out.push_str(&expand_text(v, macros, depth + 1)),
+            _ => out.push_str(&word),
+        }
+    }
+    out
 }

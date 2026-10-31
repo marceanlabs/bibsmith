@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use bibsmith::{
-    Database, disambiguate, normalise_all, scheme_or_default, sort_entries, suffix_for, write_raw,
+    ControlFile, Database, disambiguate, normalise_all, scheme_or_default, sort_entries,
+    suffix_for, write_bbl, write_raw,
 };
 use clap::{Parser, Subcommand};
 
@@ -35,6 +36,14 @@ enum Command {
     },
     /// Report what biber would rename or drop, without writing anything
     Check { file: PathBuf },
+    /// Build the .bbl for a document from the .bcf biblatex wrote
+    Bbl {
+        /// The .bcf file; the .bbl is written next to it
+        bcf: PathBuf,
+        /// Write to this file instead of alongside the .bcf
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
     /// Print the label suffix biblatex would print for each entry that needs one
     Labels {
         file: PathBuf,
@@ -134,6 +143,76 @@ fn run(cli: Cli) -> Result<(), String> {
                 }
                 None => print!("{text}"),
             }
+            Ok(())
+        }
+        Command::Bbl { bcf, out } => {
+            let xml = read(&bcf)?;
+            let ctl = ControlFile::parse(&xml)?;
+
+            // Every datasource in the control file is read; a document may add several.
+            let mut src = String::new();
+            let dir = bcf.parent().unwrap_or_else(|| std::path::Path::new("."));
+            for ds in &ctl.datasources {
+                let path = dir.join(ds);
+                src.push_str(&read(&path)?);
+                src.push('\n');
+            }
+
+            let db = biblatex::Bibliography::parse(&src)
+                .map_err(|e| format!("{}: {e}", bcf.display()))?;
+
+            // `\nocite{*}` reaches the control file as a literal `*`, and means every
+            // entry in the database rather than a key called star.
+            let mut citekeys = ctl.citekeys.clone();
+            if citekeys.iter().any(|k| k == "*") {
+                citekeys.retain(|k| k != "*");
+                let all = bibsmith::normalize::raw_entries(&src)
+                    .map_err(|e| format!("{}: {e}", bcf.display()))?;
+                for key in all.into_iter().map(|e| e.key) {
+                    if !citekeys.contains(&key) {
+                        citekeys.push(key);
+                    }
+                }
+            }
+            let missing: Vec<&String> = citekeys.iter().filter(|k| db.get(k).is_none()).collect();
+            if !missing.is_empty() {
+                return Err(format!("cited but not in the database: {missing:?}"));
+            }
+
+            // Order follows the template named in the .bcf: the document says how it
+            // wants its bibliography sorted, so there is nothing to guess.
+            let scheme = match ctl.sorting_template.as_str() {
+                "nyt" => bibsmith::Scheme::Nyt,
+                "nty" => bibsmith::Scheme::Nty,
+                "ynt" => bibsmith::Scheme::Ynt,
+                other => {
+                    return Err(format!(
+                        "sorting template {other:?} is not implemented; this build knows nyt, nty and ynt"
+                    ));
+                }
+            };
+            let cited: Vec<&biblatex::Entry> = citekeys.iter().filter_map(|k| db.get(k)).collect();
+            let ordered = sort_entries(&cited, scheme);
+            let extras = disambiguate(&ordered, scheme);
+
+            // `crossref` last: a chapter's book title and editor live on the parent, and
+            // without them the entry prints with no book at all.
+            let raw: HashMap<String, Vec<(String, String)>> =
+                bibsmith::normalize::raw_expanded_entries(&src)
+                    .map_err(|e| format!("{}: {e}", bcf.display()))?
+                    .into_iter()
+                    .map(|e| (e.key, e.fields))
+                    .collect();
+            let effective: Vec<bibsmith::merge::Effective> = ordered
+                .iter()
+                .map(|entry| bibsmith::merge::effective(&db, entry, &raw))
+                .collect();
+            let refs: Vec<&bibsmith::merge::Effective> = effective.iter().collect();
+            let text = write_bbl(&ctl, &refs, &extras);
+
+            let dest = out.unwrap_or_else(|| bcf.with_extension("bbl"));
+            std::fs::write(&dest, text).map_err(|e| format!("{}: {e}", dest.display()))?;
+            eprintln!("bibsmith: wrote {}", dest.display());
             Ok(())
         }
         Command::Labels { file, scheme } => {

@@ -102,7 +102,40 @@ So the exact-parity claim is scoped honestly: field sets match biber exactly on 
 biblatex corpus, and on arbitrary legacy BibTeX the guarantee is weaker and better —
 no field biber keeps is ever lost, and nothing the author wrote is deleted.
 
-Tests now: 20 (8 CLI contract, 4 normalisation, 4 order and disambiguation, 4 real files).
+Tests now: 30 (10 `.bbl` contract, 7 CLI contract, 5 normalisation, 4 order and
+disambiguation, 4 real files).
+
+## `.bcf` in, `.bbl` out (31 Oct 2026)
+
+`bibsmith bbl doc.bcf` reads the control file biblatex writes and produces the file
+LaTeX reads. Verified by typesetting, not by comparing text: `scripts/check-pdf.sh`
+builds the same document with biber's `.bbl` and with ours, then diffs the extracted
+PDF text.
+
+| Document | Entries | Result |
+|---|---|---|
+| `oracle/doc/doc.tex` | 5 | identical text |
+| `oracle/nyt.tex` | 92 | identical text |
+
+Five defects only the rendered page reveals, each fixed and now covered by a test:
+
+- `location` and `publisher` are **list** fields. Written as `\field` they do not print:
+  the publisher line vanished from a real document.
+- A date is never written as a date. biblatex reads parts named after the field
+  (`date`→year/month/day, `urldate`→urlyear/urlmonth/urlday, `eventdate`→eventyear…).
+  A range is two dates: `1984/1986` is `year` plus `endyear`, and `eventenddateera`
+  is needed or both ends print in full instead of "19–25 May".
+- `&` must be escaped, or "Computers & Typesetting" prints as "Computers Typesetting".
+- `{\TeX}` needs its braces. The `biblatex` crate's resolved `Entry` drops the
+  backslash, so values are read from the raw parse with abbreviations expanded
+  instead: same expansion, braces intact.
+- The `—` that replaces a repeated author comes from comparing name hashes with the
+  previous entry, so identical people must produce identical hashes. They are our own
+  md5, not biber's: biblatex only compares them for equality.
+
+Known difference that does not affect output: biber writes 102 `\entry` blocks to our
+92, because it also emits an entry for every set member and every `crossref`-only
+parent. The typeset pages are identical, so this is not chased further.
 
 ## Files
 

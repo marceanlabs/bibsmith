@@ -192,7 +192,8 @@ fn mixed_abbreviation_values_are_braced() {
 fn page_ranges_are_repunctuated() {
     use bibsmith::normalize::normalise_range;
     assert_eq!(normalise_range("55-65"), "55--65");
-    assert_eq!(normalise_range("431–456, 791–823"), "431--456,791--823");
+    // biber keeps the space after the comma: measured in a rendered .bbl, "431–456, 791–823".
+    assert_eq!(normalise_range("431–456, 791–823"), "431--456, 791--823");
     assert_eq!(normalise_range("423--491"), "423--491");
     // A dash that is not between digits is left alone.
     assert_eq!(normalise_range("1-3 and 7a-c"), "1--3 and 7a-c");
