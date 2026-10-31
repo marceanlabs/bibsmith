@@ -135,7 +135,7 @@ fn uniqueness(entries: &[&Effective]) -> std::collections::HashMap<(String, Stri
 /// "Akyildiz, I. F., W. Su, et al." instead of stopping at the first name. If the lists
 /// agree all the way, the count is the whole list — biber writes `ul=4` there, and prints
 /// every name. Where one name already tells the entries apart, nothing is written.
-fn uniquelist(entries: &[&Effective]) -> std::collections::HashMap<String, usize> {
+fn uniquelist(entries: &[&Effective], maxnames: usize) -> std::collections::HashMap<String, usize> {
     fn keys(people: &[biblatex::Person]) -> Vec<String> {
         people
             .iter()
@@ -143,12 +143,15 @@ fn uniquelist(entries: &[&Effective]) -> std::collections::HashMap<String, usize
             .collect()
     }
 
-    let mut groups: std::collections::HashMap<String, Vec<&Effective>> = Default::default();
+    // The year plays no part: two entries by the same first author are compared even when
+    // they are years apart, which is why Akyildiz 2002 and Akyildiz 2007 force a second
+    // name on the 2002 one.
+    let mut groups: std::collections::HashMap<(), Vec<&Effective>> = Default::default();
     for entry in entries {
         if entry.names.is_empty() {
             continue;
         }
-        groups.entry(label_year(entry)).or_default().push(entry);
+        groups.entry(()).or_default().push(entry);
     }
 
     let mut out = std::collections::HashMap::new();
@@ -159,7 +162,9 @@ fn uniquelist(entries: &[&Effective]) -> std::collections::HashMap<String, usize
         for entry in &members {
             let Some((field, people)) = entry.names.first() else { continue };
             let mine = keys(people);
-            if mine.is_empty() {
+            // A list no longer than `maxnames` is printed in full anyway, so extending it
+            // would change nothing.
+            if mine.is_empty() || mine.len() <= maxnames {
                 continue;
             }
             let others: Vec<Vec<String>> = members
@@ -511,7 +516,13 @@ pub fn write_bbl(
     let lists = if ctl.option("uniquelist") == Some("false") {
         Default::default()
     } else {
-        uniquelist(ordered)
+        uniquelist(
+            ordered,
+            ctl.option("maxbibnames")
+                .or_else(|| ctl.option("maxnames"))
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(3),
+        )
     };
 
     let mut out = String::new();
@@ -798,6 +809,11 @@ fn write_entry(
 
     if let Some(n) = extras.get(&entry.key) {
         field(out, "extradate", &n.to_string());
+        // `extraname` counts the occurrences of one name list in a year. biblatex uses it
+        // to decide which of them prints the name and which get the dash: with ten copies
+        // the first and the last are named and the eight between are dashed, and without
+        // this field it dashes all but the first.
+        field(out, "extraname", &n.to_string());
         field(out, "extradatescope", "labelyear");
     }
 
