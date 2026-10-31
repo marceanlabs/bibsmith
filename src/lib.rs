@@ -18,7 +18,7 @@ pub mod names;
 pub mod normalize;
 pub mod sort;
 
-pub use bbl::write_bbl;
+pub use bbl::{write_bbl, write_bbl_scoped, write_bbl_sections};
 pub use bcf::ControlFile;
 pub use disambiguate::{disambiguate, suffix_for};
 pub use normalize::{RawNormalised, normalise_all, normalise_raw, write_raw};

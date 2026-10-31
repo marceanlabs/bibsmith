@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use bibsmith::{
     ControlFile, Database, disambiguate, normalise_all, scheme_or_default, sort_entries,
-    suffix_for, write_bbl, write_raw,
+    suffix_for, write_bbl, write_bbl_scoped, write_raw,
 };
 use clap::{Parser, Subcommand};
 
@@ -293,7 +293,38 @@ fn run(cli: Cli) -> Result<(), String> {
             } else {
                 effective.iter().collect()
             };
-            let text = write_bbl(&ctl, &refs, &extras, &labels);
+            // A document with several `\refsection` blocks gets a `\refsection` per
+            // section; each section's citations are the keys listed under its number.
+            let numbered: Vec<(String, Vec<&_>)> = if ctl.sections.len() <= 1 {
+                vec![("0".to_string(), refs.clone())]
+            } else {
+                ctl.sections
+                    .iter()
+                    .map(|(num, keys)| {
+                        (
+                            num.clone(),
+                            refs.iter()
+                                .copied()
+                                .filter(|e| keys.contains(&e.key))
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .filter(|(_, list): &(String, Vec<&bibsmith::merge::Effective>)| !list.is_empty())
+                    .collect()
+            };
+            let sections: Vec<(&str, &[&bibsmith::merge::Effective])> = numbered
+                .iter()
+                .map(|(n, v)| (n.as_str(), v.as_slice()))
+                .collect();
+            let extras_by_section: Vec<HashMap<String, u8>> = numbered
+                .iter()
+                .map(|(_, list)| {
+                    let entries: Vec<&biblatex::Entry> =
+                        list.iter().filter_map(|e| db.get(&e.key)).collect();
+                    disambiguate(&entries, scheme)
+                })
+                .collect();
+            let text = write_bbl_scoped(&ctl, &sections, &extras_by_section, &labels);
 
             let dest = out.unwrap_or_else(|| bcf.with_extension("bbl"));
             std::fs::write(&dest, text).map_err(|e| format!("{}: {e}", dest.display()))?;

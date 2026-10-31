@@ -480,51 +480,32 @@ pub fn write_bbl(
     extras: &HashMap<String, u8>,
     labels: &HashMap<String, (String, Option<u8>)>,
 ) -> String {
-    // A `@set` prints its members inline after itself, so they leave the main flow.
-    let mut members: HashMap<&str, Vec<&str>> = HashMap::new();
-    for entry in ordered {
-        if let Some(set) = &entry.entryset {
-            for key in set.split(',') {
-                members.entry(set.as_str()).or_default().push(key.trim());
-            }
-        }
-    }
-    let is_member: Vec<&str> = members
-        .values()
-        .flatten()
-        .copied()
-        .filter(|k| ordered.iter().any(|e| e.key == *k))
-        .collect();
+    write_bbl_sections(ctl, &[("0", ordered)], extras, labels)
+}
 
-    // A member records which set it belongs to, because the member's own record does
-    // not: only the `@set` carries `entryset`. Without `\inset`, biblatex has no way to
-    // give a cited member the set's number and prints "[]".
-    let mut member_of: HashMap<&str, &str> = HashMap::new();
-    for entry in ordered {
-        if let Some(set) = &entry.entryset {
-            for key in set.split(',') {
-                member_of.insert(key.trim(), entry.key.as_str());
-            }
-        }
-    }
+/// The same file for a document with several `\refsection` blocks: one `\refsection`
+/// per section, each with its own datalist.
+pub fn write_bbl_sections(
+    ctl: &ControlFile,
+    sections: &[(&str, &[&Effective])],
+    extras: &HashMap<String, u8>,
+    labels: &HashMap<String, (String, Option<u8>)>,
+) -> String {
+    let per_section: Vec<HashMap<String, u8>> = vec![extras.clone(); sections.len()];
+    write_bbl_scoped(ctl, sections, &per_section, labels)
+}
 
-    // Uniqueness is a property of the whole bibliography: a name is only shortened or
-    // expanded by comparison with the others.
-    let levels = uniqueness(ordered);
-    // The style decides whether a name list is ever extended: `numeric` turns
-    // `uniquelist` off, and biber writes no `ul` there at all.
-    let lists = if ctl.option("uniquelist") == Some("false") {
-        Default::default()
-    } else {
-        uniquelist(
-            ordered,
-            ctl.option("maxbibnames")
-                .or_else(|| ctl.option("maxnames"))
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(3),
-        )
-    };
-
+/// The same, with the extradate worked out per section.
+///
+/// Each `\refsection` is its own namespace: two `Alpha 2001` entries in different sections
+/// both print 2001, and numbering them globally invents a 2001a/2001b that biber never
+/// writes.
+pub fn write_bbl_scoped(
+    ctl: &ControlFile,
+    sections: &[(&str, &[&Effective])],
+    extras_by_section: &[HashMap<String, u8>],
+    labels: &HashMap<String, (String, Option<u8>)>,
+) -> String {
     let mut out = String::new();
     out.push_str("% $ biblatex auxiliary file $\n");
     out.push_str("% $ biblatex bbl format version 3.3 $\n");
@@ -541,47 +522,96 @@ pub fn write_bbl(
     out.push_str("     {The bibliography requires the 'biblatex' package.}\n");
     out.push_str("      \\aftergroup\\endinput}\n");
     out.push_str("  {}\n\\endgroup\n\n\n");
-    out.push_str("\\refsection{0}\n");
-    out.push_str(&format!("  \\datalist[entry]{{{}}}\n", ctl.datalist_name));
 
-    // Set members are written first, with the options that keep them out of the list,
-    // and the set itself follows in the sorted flow. Writing them after the set leaves
-    // biblatex without a label number for a cited member: `\cite{member}` prints "[]".
-    for entry in ordered {
-        if is_member.contains(&entry.key.as_str()) {
-            write_entry(
-                &mut out,
-                ctl,
-                entry,
-                extras,
-                labels,
-                &levels,
-                &lists,
-                Some(
-                    member_of
-                        .get(entry.key.as_str())
-                        .copied()
-                        .unwrap_or_default(),
-                ),
-                "skipbib=true,skipbiblist=true,skiplab=true",
-            );
-        }
-    }
+    for (index, (section_no, ordered)) in sections.iter().map(|(n, o)| (n, *o)).enumerate() {
+        let extras = extras_by_section
+            .get(index)
+            .or_else(|| extras_by_section.first())
+            .cloned()
+            .unwrap_or_default();
+        let extras = &extras;
+        out.push_str(&format!("\\refsection{{{section_no}}}\n"));
+        out.push_str(&format!("  \\datalist[entry]{{{}}}\n", ctl.datalist_name));
 
-    for entry in ordered {
-        if is_member.contains(&entry.key.as_str()) {
-            continue; // written above
+        // A `@set` prints its members inline after itself, so they leave the main flow.
+        let mut members: HashMap<&str, Vec<&str>> = HashMap::new();
+        for entry in ordered {
+            if let Some(set) = &entry.entryset {
+                for key in set.split(',') {
+                    members.entry(set.as_str()).or_default().push(key.trim());
+                }
+            }
         }
-        let inset = if entry.entryset.is_some() {
-            Some("")
+        let is_member: Vec<&str> = members
+            .values()
+            .flatten()
+            .copied()
+            .filter(|k| ordered.iter().any(|e| e.key == *k))
+            .collect();
+
+        // A member records which set it belongs to, because the member's own record does
+        // not: only the `@set` carries `entryset`. Without `\\inset`, biblatex has no way to
+        // give a cited member the set's number and prints "[]".
+        let mut member_of: HashMap<&str, &str> = HashMap::new();
+        for entry in ordered {
+            if let Some(set) = &entry.entryset {
+                for key in set.split(',') {
+                    member_of.insert(key.trim(), entry.key.as_str());
+                }
+            }
+        }
+
+        // Uniqueness is a property of the whole bibliography: a name is only shortened or
+        // expanded by comparison with the others.
+        let levels = uniqueness(ordered);
+        // The style decides whether a name list is ever extended: `numeric` turns
+        // `uniquelist` off, and biber writes no `ul` there at all.
+        let lists = if ctl.option("uniquelist") == Some("false") {
+            Default::default()
         } else {
-            None
+            uniquelist(
+                ordered,
+                ctl.option("maxbibnames")
+                    .or_else(|| ctl.option("maxnames"))
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(3),
+            )
         };
-        write_entry(&mut out, ctl, entry, extras, labels, &levels, &lists, inset, "");
-    }
 
-    out.push_str("  \\enddatalist\n");
-    out.push_str("\\endrefsection\n");
+        // Set members first, with the options that keep them out of the list: writing them
+        // after the set leaves biblatex without a label number for a cited member.
+        for entry in ordered {
+            if is_member.contains(&entry.key.as_str()) {
+                write_entry(
+                    &mut out,
+                    ctl,
+                    entry,
+                    extras,
+                    labels,
+                    &levels,
+                    &lists,
+                    Some(
+                        member_of
+                            .get(entry.key.as_str())
+                            .copied()
+                            .unwrap_or_default(),
+                    ),
+                    "skipbib=true,skipbiblist=true,skiplab=true",
+                );
+            }
+        }
+
+        for entry in ordered {
+            if is_member.contains(&entry.key.as_str()) {
+                continue; // written above
+            }
+            let inset = if entry.entryset.is_some() { Some("") } else { None };
+            write_entry(&mut out, ctl, entry, extras, labels, &levels, &lists, inset, "");
+        }
+
+        out.push_str("  \\enddatalist\n");
+        out.push_str("\\endrefsection\n");
+    }
     out.push_str("\\endinput\n");
     out
 }

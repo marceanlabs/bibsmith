@@ -35,6 +35,11 @@ pub struct ControlFile {
     pub citekeys: Vec<String>,
     /// The datalist name, e.g. `nyt/global//global/global/global`.
     pub datalist_name: String,
+    /// Citekeys per numbered section, for a document with several `\refsection`s.
+    ///
+    /// The order is the order the sections appear, and section `0` is the global one that
+    /// wraps each bibliography; it is kept as written.
+    pub sections: Vec<(String, Vec<String>)>,
     /// Effective biblatex options, as the style left them.
     ///
     /// `uniquelist` lives here: the numeric style turns it off, and biber then writes no
@@ -80,6 +85,8 @@ impl ControlFile {
             ..ControlFile::default()
         };
         let mut stack: Vec<String> = Vec::new();
+        // The number of each open <bcf:section>, innermost last.
+        let mut section_stack: Vec<String> = Vec::new();
         // Where we are inside a sorting template.
         let mut in_template = false;
         let mut template_name = String::new();
@@ -113,6 +120,11 @@ impl ControlFile {
                             .map(|(_, v)| v.clone())
                     };
                     match local.as_str() {
+                        "section" => {
+                            if let Some(n) = attr("number") {
+                                section_stack.push(n);
+                            }
+                        }
                         "fields" => in_fields = true,
                         "field" if in_fields => {
                             last_field_dtype = attr("datatype");
@@ -156,6 +168,9 @@ impl ControlFile {
                     let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
                     let local = name.rsplit(':').next().unwrap_or(&name).to_string();
                     match local.as_str() {
+                        "section" => {
+                            section_stack.pop();
+                        }
                         "fields" => in_fields = false,
                         "sortingtemplate" => {
                             in_template = false;
@@ -190,8 +205,25 @@ impl ControlFile {
                                 ctl.fieldkinds.insert(text, kind);
                             }
                         }
-                        "datasource" => ctl.datasources.push(text),
-                        "citekey" => ctl.citekeys.push(text),
+                        // The same file is listed once per section, and a document with
+                        // two \refsection blocks would otherwise have its database read
+                        // twice and every key in it look like a duplicate.
+                        "datasource" => {
+                            if !ctl.datasources.contains(&text) {
+                                ctl.datasources.push(text);
+                            }
+                        }
+                        "citekey" => {
+                            let section = section_stack
+                                .last()
+                                .cloned()
+                                .unwrap_or_else(|| "0".to_string());
+                            ctl.citekeys.push(text.clone());
+                            match ctl.sections.iter_mut().find(|(n, _)| *n == section) {
+                                Some((_, keys)) => keys.push(text),
+                                None => ctl.sections.push((section, vec![text])),
+                            }
+                        }
                         "presort" => ctl.presort = text,
                         "sortitem" if in_sort => {
                             if let Some(group) = current_sort.as_mut() {

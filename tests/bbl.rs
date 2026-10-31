@@ -474,3 +474,35 @@ fn an_identical_name_list_is_not_extended() {
     let bbl = write_bbl(&ctl, &refs, &HashMap::new(), &HashMap::new());
     assert!(!bbl.contains("ul="), "nothing to gain, so nothing written");
 }
+
+#[test]
+fn a_document_with_two_sections_gets_two_refsections() {
+    // The control file lists the database once per section, and the same file read twice
+    // makes every key look like a duplicate.
+    let xml = r#"<?xml version="1.0"?>
+<bcf:controlfile version="3.3" xmlns:bcf="https://sourceforge.net/projects/biblatex">
+  <bcf:datasource type="file" datatype="bibtex">m.bib</bcf:datasource>
+  <bcf:datasource type="file" datatype="bibtex">m.bib</bcf:datasource>
+  <bcf:section number="0">
+    <bcf:section number="1">
+      <bcf:citekey order="1">alpha</bcf:citekey>
+      <bcf:citekey order="2">beta</bcf:citekey>
+    </bcf:section>
+  </bcf:section>
+  <bcf:section number="0">
+    <bcf:section number="2">
+      <bcf:citekey order="1">gamma</bcf:citekey>
+      <bcf:citekey order="2">delta</bcf:citekey>
+    </bcf:section>
+  </bcf:section>
+  <bcf:sortingtemplate name="nyt"><bcf:sort><bcf:sortitem><bcf:field>author</bcf:field></bcf:sortitem></bcf:sort></bcf:sortingtemplate>
+  <bcf:datalist section="1" name="nyt/global//global/global/global"/>
+  <bcf:datalist section="2" name="nyt/global//global/global/global"/>
+</bcf:controlfile>"#;
+    let ctl = ControlFile::parse(xml).expect("parse");
+    assert_eq!(ctl.datasources.len(), 1, "the same file listed twice is one file");
+    let numbers: Vec<&str> = ctl.sections.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(numbers, ["1", "2"], "one section per \\refsection");
+    assert_eq!(ctl.sections[0].1, ["alpha", "beta"]);
+    assert_eq!(ctl.sections[1].1, ["gamma", "delta"]);
+}
