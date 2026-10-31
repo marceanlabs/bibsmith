@@ -1,14 +1,14 @@
 [package]
 name = "bibsmith"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
-description = "Sort and normalise .bib files the way biblatex does, without Perl or TeX"
+description = "Write the .bbl biblatex typesets, in Rust, without Perl or a TeX install"
 license = "Apache-2.0"
 repository = "https://github.com/marceanlabs/bibsmith"
 keywords = ["bibtex", "biblatex", "biber", "citation", "cli"]
 categories = ["command-line-utilities", "parsing"]
-exclude = ["spikes/*", "oracle/*.pdf", "oracle/*.aux", "oracle/*.log", "oracle/*.bbl", "oracle/*.bcf", "oracle/*.blg", "oracle/*.run.xml"]
+exclude = ["spikes/*", "oracle/*.pdf", "oracle/*.aux", "oracle/*.log", "oracle/*.bbl", "oracle/*.blg", "oracle/*.run.xml"]
 
 [lib]
 name = "bibsmith"
