@@ -328,7 +328,7 @@ pub fn sort_entries<'a>(entries: &[&'a Entry], scheme: Scheme) -> Vec<&'a Entry>
         .iter()
         .map(|e| (parts(e, scheme, &db), *e))
         .collect();
-    keyed.sort_by(|a, b| compare_parts(&collator, &a.0, &b.0));
+    keyed.sort_by(|a, b| compare_parts(&collator, &a.0, &b.0, &[]));
     keyed.into_iter().map(|(_, e)| e).collect()
 }
 
@@ -336,15 +336,21 @@ fn compare_parts(
     collator: &icu_collator::CollatorBorrowed,
     a: &Parts,
     b: &Parts,
+    directions: &[bool],
 ) -> std::cmp::Ordering {
-    for (pa, pb) in a.iter().zip(b.iter()) {
+    for (index, (pa, pb)) in a.iter().zip(b.iter()).enumerate() {
         for (xa, xb) in pa.iter().zip(pb.iter()) {
             // An entry with nothing in the slot sorts after one that has something:
             // a document undated in the same year as a dated one files after it, which
             // is what biber does, not before as an empty string would.
             let ord = collator.compare(xa, xb);
             if ord != std::cmp::Ordering::Equal {
-                return ord;
+                // A group the template marks descending is compared backwards, which is
+                // how `ydnt` puts the newest year first.
+                return match directions.get(index).copied().unwrap_or(false) {
+                    true => ord.reverse(),
+                    false => ord,
+                };
             }
         }
         // A name list that runs out sorts first: `Smith, John` before `Smith, John and
@@ -535,6 +541,7 @@ pub fn sort_entries_by_template<'a>(
         .iter()
         .map(|e| (template_parts(e, groups, extra, &db), *e))
         .collect();
-    keyed.sort_by(|a, b| compare_parts(&collator, &a.0, &b.0));
+    let directions: Vec<bool> = groups.iter().map(|g| g.descending).collect();
+    keyed.sort_by(|a, b| compare_parts(&collator, &a.0, &b.0, &directions));
     keyed.into_iter().map(|(_, e)| e).collect()
 }

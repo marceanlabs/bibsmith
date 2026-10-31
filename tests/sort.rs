@@ -42,6 +42,7 @@ fn a_legacy_key_is_sorted_as_text_not_as_markup() {
         entries.iter().map(|e| (e.key.as_str(), *e)).collect();
     let groups = vec![bibsmith::bcf::SortGroup {
         finalsort: false,
+        descending: false,
         items: vec![
             bibsmith::bcf::SortItem::Field("author".into()),
             bibsmith::bcf::SortItem::Field("title".into()),
@@ -53,4 +54,26 @@ fn a_legacy_key_is_sorted_as_text_not_as_markup() {
     // biber's own order for these keys: Knaa, Knuth, Knv1987, Knz.
     assert_eq!(keys, ["a1", "a2", "a3", "a4"], "{keys:?}");
     let _ = by_key;
+}
+
+#[test]
+fn a_group_marked_descending_is_compared_backwards() {
+    // `ydnt` sorts the year newest first, and its template says so: `<bcf:sort
+    // sort_direction="descending">`. Ignoring that put 1986 above 2001.
+    let src = "@misc{old, author = {Smith, Ann}, title = {T}, year = {1986}}\n\
+               @misc{new, author = {Smith, Ann}, title = {T}, year = {2001}}\n";
+    let db = bibsmith::parse_lenient(src).expect("parse");
+    let entries: Vec<&biblatex::Entry> = db.iter().collect();
+    let extra = std::collections::HashMap::new();
+    let group = |descending: bool| {
+        vec![bibsmith::bcf::SortGroup {
+            finalsort: false,
+            descending,
+            items: vec![bibsmith::bcf::SortItem::Field("year".into())],
+        }]
+    };
+    let ascending = bibsmith::sort::sort_entries_by_template(&entries, &group(false), &extra);
+    assert_eq!(ascending[0].key, "old", "oldest first when ascending");
+    let descending = bibsmith::sort::sort_entries_by_template(&entries, &group(true), &extra);
+    assert_eq!(descending[0].key, "new", "newest first when descending");
 }

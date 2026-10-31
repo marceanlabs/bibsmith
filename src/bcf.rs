@@ -16,6 +16,9 @@ use quick_xml::events::Event;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SortGroup {
     pub finalsort: bool,
+    /// `sort_direction="descending"` — the group is compared backwards. A year sorted
+    /// newest first carries a `9999` literal so undated entries stay at the end.
+    pub descending: bool,
     pub items: Vec<SortItem>,
 }
 
@@ -138,6 +141,8 @@ impl ControlFile {
                             in_sort = true;
                             current_sort = Some(SortGroup {
                                 finalsort: attr("final").is_some_and(|v| v == "1"),
+                                descending: attr("sort_direction")
+                                    .is_some_and(|v| v == "descending"),
                                 items: Vec::new(),
                             });
                         }
