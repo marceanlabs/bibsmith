@@ -24,13 +24,13 @@
         {{un=0,uniquepart=base,hash=0928e944609dcd46bbab2012161c693e}{%
            family={Baez},
            familyi={B\bibinitperiod},
-           given={John C.},
+           given={John\bibnamedelima C.},
            giveni={J\bibinitperiod\bibinitdelim C\bibinitperiod},
            givenun=0}}%
         {{un=0,uniquepart=base,hash=7822dbf70b8f44c7433c43b354d3319b}{%
            family={Lauda},
            familyi={L\bibinitperiod},
-           given={Aaron D.},
+           given={Aaron\bibnamedelima D.},
            giveni={A\bibinitperiod\bibinitdelim D\bibinitperiod},
            givenun=0}}%
       }
@@ -42,7 +42,7 @@
       \strng{authornamehash}{d7ac2e7cea7f23664d497eaa9d95d044}
       \strng{authorfullhash}{d7ac2e7cea7f23664d497eaa9d95d044}
       \strng{authorfullhashraw}{d7ac2e7cea7f23664d497eaa9d95d044}
-      \field{sortinit}{H}
+      \field{sortinit}{B}
       \field{title}{Higher-Dimensional Algebra {V}: 2-Groups}
       \verb{url}
       \verb https://arxiv.org/abs/math/0307200
@@ -62,13 +62,13 @@
         {{un=0,uniquepart=base,hash=0928e944609dcd46bbab2012161c693e}{%
            family={Baez},
            familyi={B\bibinitperiod},
-           given={John C.},
+           given={John\bibnamedelima C.},
            giveni={J\bibinitperiod\bibinitdelim C\bibinitperiod},
            givenun=0}}%
         {{un=0,uniquepart=base,hash=7822dbf70b8f44c7433c43b354d3319b}{%
            family={Lauda},
            familyi={L\bibinitperiod},
-           given={Aaron D.},
+           given={Aaron\bibnamedelima D.},
            giveni={A\bibinitperiod\bibinitdelim D\bibinitperiod},
            givenun=0}}%
       }
@@ -80,11 +80,11 @@
       \strng{authornamehash}{d7ac2e7cea7f23664d497eaa9d95d044}
       \strng{authorfullhash}{d7ac2e7cea7f23664d497eaa9d95d044}
       \strng{authorfullhashraw}{d7ac2e7cea7f23664d497eaa9d95d044}
-      \field{sortinit}{H}
+      \field{sortinit}{B}
       \field{title}{Higher-Dimensional Algebra {V}: 2-Groups}
       \field{journaltitle}{Theory and Applications of Categories}
       \field{volume}{12}
-      \field{pages}{423--491}
+      \field{pages}{423\bibrangedash 491}
       \field{year}{2004}
       \field{labeldatesource}{}
       \field{labelnamesource}{author}
@@ -98,7 +98,7 @@
         {{un=0,uniquepart=base,hash=187ae2c9217ec3f048f5f736fd1daea7}{%
            family={Knuth},
            familyi={K\bibinitperiod},
-           given={Donald E.},
+           given={Donald\bibnamedelima E.},
            giveni={D\bibinitperiod\bibinitdelim E\bibinitperiod},
            givenun=0}}%
       }
@@ -110,7 +110,7 @@
       \strng{authornamehash}{187ae2c9217ec3f048f5f736fd1daea7}
       \strng{authorfullhash}{187ae2c9217ec3f048f5f736fd1daea7}
       \strng{authorfullhashraw}{187ae2c9217ec3f048f5f736fd1daea7}
-      \field{sortinit}{T}
+      \field{sortinit}{K}
       \field{title}{The {\TeX}book}
       \list{publisher}{1}{%
         {Addison-Wesley}%
@@ -155,9 +155,9 @@
       \strng{authornamehash}{1a4ad189403b716f65097e984d1891c5}
       \strng{authorfullhash}{1a4ad189403b716f65097e984d1891c5}
       \strng{authorfullhashraw}{1a4ad189403b716f65097e984d1891c5}
-      \field{sortinit}{T}
+      \field{sortinit}{W}
       \field{title}{The True Frontier}
-      \field{pages}{55--65}
+      \field{pages}{55\bibrangedash 65}
       \field{booktitle}{Space and Beyond}
       \field{booksubtitle}{The Frontier Theme in Science Fiction}
       \list{publisher}{1}{%
@@ -195,7 +195,7 @@
       \strng{authornamehash}{9677881dc022ae175d5da5511c3e1a0e}
       \strng{authorfullhash}{9677881dc022ae175d5da5511c3e1a0e}
       \strng{authorfullhashraw}{9677881dc022ae175d5da5511c3e1a0e}
-      \field{sortinit}{S}
+      \field{sortinit}{W}
       \field{title}{Space and Beyond}
       \field{subtitle}{The Frontier Theme in Science Fiction}
       \list{publisher}{1}{%

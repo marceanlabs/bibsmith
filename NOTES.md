@@ -112,10 +112,25 @@ LaTeX reads. Verified by typesetting, not by comparing text: `scripts/check-pdf.
 builds the same document with biber's `.bbl` and with ours, then diffs the extracted
 PDF text.
 
-| Document | Entries | Result |
-|---|---|---|
-| `oracle/doc/doc.tex` | 5 | identical text |
-| `oracle/nyt.tex` | 92 | identical text |
+| Document | Style | Entries | Result |
+|---|---|---|---|
+| `oracle/doc/doc.tex` | authoryear | 5 | identical text |
+| `oracle/nyt.tex` | authoryear, nyt | 92 | identical text |
+| `oracle/style-authortitle.tex` | authortitle, nty | 92 | identical text |
+| `oracle/style-numeric.tex` | numeric, nty | 92 | identical text |
+
+Three more defects came out of the second and third styles:
+
+- `\inset{set}` has to be written on the *member*, and the member's own record does not
+  carry `entryset` — only the `@set` does. Without it, `\cite{member}` prints "[]": the
+  member has no number and cannot borrow the set's.
+- `sortinit` is the label name's first letter, not the title's: "Weinberg" indexes
+  under W even though his title starts "A Model of Leptons".
+- Given names are joined with `\bibnamedelima`, not a space, and ranges with
+  `\bibrangedash`: both change where lines break, so a space and a `--` look right in
+  the source and reflow the page.
+- The label prints the short title when there is one, so `labeltitlesource` follows the
+  entry instead of always saying `title`.
 
 Five defects only the rendered page reveals, each fixed and now covered by a test:
 

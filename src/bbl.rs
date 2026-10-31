@@ -110,7 +110,10 @@ fn name_block(field_name: &str, people: &[Person]) -> String {
             initials(&p.name, "\\bibinitperiod")
         ));
         if !p.given_name.is_empty() {
-            out.push_str(&format!("           given={{{}}},\n", p.given_name));
+            // Parts of a given name are joined with `\bibnamedelima`, as biber writes
+            // them: a plain space breaks lines in different places.
+            let given = p.given_name.replace(' ', "\\bibnamedelima ");
+            out.push_str(&format!("           given={{{given}}},\n"));
             out.push_str(&format!(
                 "           giveni={{{}}},\n",
                 initials(&p.given_name, "\\bibinitperiod")
@@ -241,6 +244,18 @@ pub fn write_bbl(
         .filter(|k| ordered.iter().any(|e| e.key == *k))
         .collect();
 
+    // A member records which set it belongs to, because the member's own record does
+    // not: only the `@set` carries `entryset`. Without `\inset`, biblatex has no way to
+    // give a cited member the set's number and prints "[]".
+    let mut member_of: HashMap<&str, &str> = HashMap::new();
+    for entry in ordered {
+        if let Some(set) = &entry.entryset {
+            for key in set.split(',') {
+                member_of.insert(key.trim(), entry.key.as_str());
+            }
+        }
+    }
+
     let mut out = String::new();
     out.push_str("% $ biblatex auxiliary file $\n");
     out.push_str("% $ biblatex bbl format version 3.3 $\n");
@@ -260,26 +275,37 @@ pub fn write_bbl(
     out.push_str("\\refsection{0}\n");
     out.push_str(&format!("  \\datalist[entry]{{{}}}\n", ctl.datalist_name));
 
+    // Set members are written first, with the options that keep them out of the list,
+    // and the set itself follows in the sorted flow. Writing them after the set leaves
+    // biblatex without a label number for a cited member: `\cite{member}` prints "[]".
     for entry in ordered {
         if is_member.contains(&entry.key.as_str()) {
-            continue; // printed with its set
+            write_entry(
+                &mut out,
+                ctl,
+                entry,
+                extras,
+                Some(
+                    member_of
+                        .get(entry.key.as_str())
+                        .copied()
+                        .unwrap_or_default(),
+                ),
+                "skipbib=true,skipbiblist=true,skiplab=true",
+            );
         }
-        write_entry(&mut out, ctl, entry, extras, "");
+    }
 
-        if let Some(set) = &entry.entryset {
-            for key in members.get(set.as_str()).cloned().unwrap_or_default() {
-                if let Some(child) = ordered.iter().find(|e| e.key == key) {
-                    // Members are skipped from the list and printed inside the set.
-                    write_entry(
-                        &mut out,
-                        ctl,
-                        child,
-                        extras,
-                        "skipbib=true,skipbiblist=true,skiplab=true",
-                    );
-                }
-            }
+    for entry in ordered {
+        if is_member.contains(&entry.key.as_str()) {
+            continue; // written above
         }
+        let inset = if entry.entryset.is_some() {
+            Some("")
+        } else {
+            None
+        };
+        write_entry(&mut out, ctl, entry, extras, inset, "");
     }
 
     out.push_str("  \\enddatalist\n");
@@ -293,6 +319,7 @@ fn write_entry(
     ctl: &ControlFile,
     entry: &Effective,
     extras: &HashMap<String, u8>,
+    inset: Option<&str>,
     options: &str,
 ) {
     out.push_str(&format!(
@@ -300,9 +327,16 @@ fn write_entry(
         entry.key, entry.kind
     ));
 
-    if let Some(set) = &entry.entryset {
-        let command = if options.is_empty() { "set" } else { "inset" };
-        out.push_str(&format!("      \\{command}{{{set}}}\n"));
+    match inset {
+        // A `@set` lists its members.
+        Some("") => {
+            if let Some(set) = &entry.entryset {
+                out.push_str(&format!("      \\set{{{set}}}\n"));
+            }
+        }
+        // A member points back at its set, which is how biblatex finds the set's label.
+        Some(set) if !set.is_empty() => out.push_str(&format!("      \\inset{{{set}}}\n")),
+        _ => {}
     }
 
     let mut label_source = String::new();
@@ -333,13 +367,27 @@ fn write_entry(
         }
     }
 
-    // A first-letter index, which some styles print.
-    let sortinit = entry
-        .values
+    // The first-letter index comes from the label name, and only falls back to the
+    // title when there is no name: biber puts "W" for Weinberg under "A Model of
+    // Leptons".
+    let index_source = entry
+        .names
         .iter()
-        .find(|(k, _)| k == "sorttitle")
-        .or_else(|| entry.values.iter().find(|(k, _)| k == "title"))
-        .and_then(|(_, v)| v.chars().find(|c| c.is_alphabetic()))
+        .find(|(field, _)| *field == label_source)
+        .and_then(|(_, people)| people.first())
+        .map(|p| p.name.clone())
+        .or_else(|| {
+            entry
+                .values
+                .iter()
+                .find(|(k, _)| k == "sorttitle")
+                .or_else(|| entry.values.iter().find(|(k, _)| k == "title"))
+                .map(|(_, v)| v.clone())
+        })
+        .unwrap_or_default();
+    let sortinit = index_source
+        .chars()
+        .find(|c| c.is_alphanumeric())
         .map(|c| c.to_uppercase().to_string())
         .unwrap_or_default();
     if !sortinit.is_empty() {
@@ -355,7 +403,8 @@ fn write_entry(
         }
         let target = crate::normalize::renamed_field(key).unwrap_or(key.as_str());
         let value = if RANGES.contains(&key.as_str()) {
-            crate::normalize::normalise_range(value)
+            // biblatex prints ranges with its own macro, not a literal dash.
+            crate::normalize::normalise_range(value).replace("--", "\\bibrangedash ")
         } else {
             escape_ampersands(value)
         };
@@ -409,7 +458,15 @@ fn write_entry(
     if !label_source.is_empty() {
         field(out, "labelnamesource", &label_source);
     }
-    field(out, "labeltitlesource", "title");
+    // The label prints the short title when there is one, and biber records that
+    // choice in the .bbl: with `title` hardcoded, an authortitle citation prints the
+    // whole title instead of the short one.
+    let title_source = if entry.values.iter().any(|(k, _)| k == "shorttitle") {
+        "shorttitle"
+    } else {
+        "title"
+    };
+    field(out, "labeltitlesource", title_source);
     field(out, "dateera", "ce");
 
     if let Some(n) = extras.get(&entry.key) {
