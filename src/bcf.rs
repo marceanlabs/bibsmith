@@ -198,6 +198,11 @@ impl ControlFile {
         if ctl.citekeys.is_empty() {
             return Err("bcf: no citekeys; is this the right file?".to_string());
         }
+        // A key cited three times is listed three times in the control file. Writing one
+        // entry per citation puts it in the bibliography three times: a full entry and a
+        // dash for each repeat.
+        let mut seen = std::collections::HashSet::new();
+        ctl.citekeys.retain(|key| seen.insert(key.clone()));
         // The datalist names the template the document sorts with; that template's
         // groups are the ones a writer must honour.
         if let Some(groups) = ctl.templates.get(&ctl.sorting_template) {

@@ -39,7 +39,10 @@ cp "$BASE.pdf" "$BASE.pdf.biber"
 # What bibsmith produces.
 "$TEXBIN/biber" --quiet "$BASE" >/dev/null 2>&1 || true
 "$BINSMITH" bbl "$BASE.bcf" -o "$BASE.bbl"
+# Two passes: biblatex's ibidem tracker and cross-references settle on the second,
+# and comparing after one pass reports differences that are only missing runs.
 "$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >/tmp/bibsmith-pdflatex.log 2>&1 || true
+"$TEXBIN/pdflatex" -interaction=nonstopmode "$BASE.tex" >>/tmp/bibsmith-pdflatex.log 2>&1 || true
 if grep -qE '^! ' /tmp/bibsmith-pdflatex.log; then
   print -u2 "LaTeX errors with bibsmith's .bbl:"
   grep -E '^! ' -A3 /tmp/bibsmith-pdflatex.log

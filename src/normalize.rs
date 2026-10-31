@@ -40,8 +40,6 @@ const RENAMES: &[(&str, &str)] = &[
 /// the bibliography, because those fields are how an author controls the order
 /// (`cms` sorts under C only because it sets `sorttitle`). A tool whose job is the
 /// order must not throw away the fields that decide it.
-const COMPUTED: &[&str] = &[];
-
 /// Fields whose value biber re-punctuates as a numeric range.
 pub const RANGES: &[&str] = &["pages", "pageref", "pagetotal"];
 

@@ -14,13 +14,17 @@ written, each verified by `scripts/check-pdf.sh`.
 | `.bcf` in, `.bbl` out | five documents typeset identically to biber |
 | Styles: authoryear, authortitle, numeric, alphabetic | identical PDF text |
 | `labelalpha` and `extraalpha` | 86/86 labels match biber |
+| `verbose`, footnotes, `\footcites`, repeats | identical PDF text |
 
 ## Steps, in order
 
-1. **`verbose` and its relatives** (`verbose-note`, `verbose-inote`, `verbose-trad1/2/3`).
-   These print the full reference in the *citation*, so they need note state and
-   `ibidem` tracking, not just a sorted list. Two to three weeks; the largest remaining
-   single item. `oracle/style-verbose.tex` already exists as the failing case.
+1. ~~**`verbose` and its relatives.**~~ Done 31 Oct 2026: `verbose` and a document with
+   `\footcite`, a repeated citation and `\footcites` with pre- and postnotes both
+   typeset identically. The style's citation machinery lives in biblatex and the `.aux`;
+   the `.bbl` it needs is the same one the other styles need. That two-week estimate was
+   wrong, and finding out cost one document.
+   Still untested: `verbose-note`, `verbose-inote`, `verbose-trad1/2/3`, which differ in
+   *when* the short form is used, so they are a document each rather than a rewrite.
 2. **`uniquename`, `uniquelist`, `uniquetitle`.** biber decides these across the whole
    bibliography and writes `\field{extraname}`, `\field{uniquelist}`, `\field{uniquetitle}`.
    One to two weeks, and it forces the refinement below.
@@ -49,6 +53,13 @@ is not enough for `uniquename`: biber distinguishes `namehash` from `fullhash` f
 
 `sortinit` is derived from the label name and matches on this corpus; a name that opens
 with a TeX command (`{\O}stergaard`) has not been tested.
+
+## Found by the verbose document
+
+A key cited three times is listed three times in the control file, and writing one entry
+per citation put it in the bibliography three times: a full entry followed by a dash for
+each repeat. The reader now de-duplicates, and a test covers it. This affects any real
+document, not just `verbose`.
 
 ## Removed as dead or duplicated (31 Oct 2026)
 

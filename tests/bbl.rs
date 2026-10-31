@@ -271,3 +271,18 @@ fn a_repeated_label_is_numbered_from_one() {
     let unique = vec!["Gla61".to_string()];
     assert_eq!(bibsmith::label::extra_alpha(&unique), vec![None]);
 }
+
+#[test]
+fn a_key_cited_twice_is_written_once() {
+    // The control file lists a key once per citation. Without de-duplication the
+    // bibliography prints the entry and then a dash for every repeat, which is what a
+    // document that cites the same work twice in a row showed.
+    let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).expect("bcf");
+    let doubled = xml.replace(
+        "<bcf:citekey order=\"1\"",
+        "<bcf:citekey order=\"0\">knuth:ct</bcf:citekey>\n      <bcf:citekey order=\"1\"",
+    );
+    let ctl = ControlFile::parse(&doubled).expect("bcf parses");
+    let count = ctl.citekeys.iter().filter(|k| *k == "knuth:ct").count();
+    assert_eq!(count, 1, "a repeated citation must not become a repeated entry");
+}
