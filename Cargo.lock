@@ -75,6 +75,7 @@ dependencies = [
  "icu_locale",
  "md5",
  "quick-xml",
+ "unicode-normalization",
 ]
 
 [[package]]

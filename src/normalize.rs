@@ -203,8 +203,18 @@ pub fn normalise_raw_with(entry: &RawEntry<'_>, rename: bool) -> RawNormalised {
         // biber joins a value that was wrapped over several lines into one line
         // and collapses the indentation, so every value gets the same treatment.
         let mut text = collapse_whitespace(&raw_text);
+        if rename {
+            // `biber --tool` writes UTF-8: `{\"O}zge` is `Özge` in its output. Sorting
+            // without --normalise leaves the file as the author wrote it.
+            text = decode_accents(&text);
+        }
+        // biber --tool does rewrite a range: `55-65` becomes `55--65`, and an en dash
+        // becomes `--` as well. Measured, not assumed.
         if RANGES.contains(&target.as_str()) && !abbreviation {
-            text = normalise_range(&text);
+            // A `.bib` page range is written without the space after a comma: `biber --tool`
+            // gives `431--456,791--823`. biblatex prints with a space, and the `.bbl` writer
+            // puts it back where it belongs.
+            text = normalise_range(&text).replace(", ", ",");
         }
         fields.push((target, text, abbreviation));
     }
@@ -234,7 +244,8 @@ pub fn write_raw(entry: &RawNormalised) -> String {
         out.push_str(&name.to_ascii_uppercase());
         out.push_str(" = ");
         if *abbreviation {
-            out.push_str(value);
+            // biber writes a macro name in capitals, whatever case the author used.
+            out.push_str(&value.to_uppercase());
         } else {
             out.push('{');
             out.push_str(value);
@@ -479,4 +490,113 @@ fn expand_text(value: &str, macros: &HashMap<String, String>, depth: usize) -> S
         }
     }
     out
+}
+
+/// Decode the accent commands a `.bib` written in the 1990s uses, the way `biber --tool`
+/// does: `{\"O}zge` becomes `Özge`, `{\c{C}}etinkaya` becomes `Çetinkaya`.
+///
+/// Only the `.bib` writer does this. The `.bbl` writer must keep the TeX exactly as it was
+/// written, because biblatex is the thing that is supposed to interpret it.
+pub fn decode_accents(text: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+
+    const MARKS: &[(char, char)] = &[
+        ('"', '\u{0308}'), // diaeresis
+        ('\'', '\u{0301}'), // acute
+        ('`', '\u{0300}'), // grave
+        ('^', '\u{0302}'), // circumflex
+        ('~', '\u{0303}'), // tilde
+        ('=', '\u{0304}'), // macron
+        ('.', '\u{0307}'), // dot above
+        ('u', '\u{0306}'), // breve
+        ('v', '\u{030C}'), // caron
+        ('H', '\u{030B}'), // double acute
+        ('c', '\u{0327}'), // cedilla
+        ('k', '\u{0328}'), // ogonek
+    ];
+    // Accents that stand alone rather than over a letter.
+    const SINGLES: &[(&str, char)] = &[
+        ("\\i", 'ı'),
+        ("\\j", 'ȷ'),
+        ("\\ss", 'ß'),
+        ("\\o", 'ø'),
+        ("\\O", 'Ø'),
+        ("\\aa", 'å'),
+        ("\\AA", 'Å'),
+        ("\\ae", 'æ'),
+        ("\\AE", 'Æ'),
+        ("\\oe", 'œ'),
+        ("\\OE", 'Œ'),
+        ("\\l", 'ł'),
+        ("\\L", 'Ł'),
+        ("\\dh", 'ð'),
+        ("\\th", 'þ'),
+    ];
+
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '{' && chars.get(i + 1) == Some(&'\\') {
+            // `{\CMD x}` or `{\CMD{x}}`
+            // `\"O` is a punctuation command; `\c{C}` and `\v{s}` are letter commands.
+            let first = chars.get(i + 2).copied();
+            let mut j = i + 2;
+            let command: String = match first {
+                Some(c) if MARKS.iter().any(|(k, _)| *k == c) && !c.is_alphabetic() => {
+                    j += 1;
+                    c.to_string()
+                }
+                _ => {
+                    let mut c = String::new();
+                    while j < chars.len() && chars[j].is_alphabetic() {
+                        c.push(chars[j]);
+                        j += 1;
+                    }
+                    c
+                }
+            };
+            let mark = command.chars().next();
+            let is_mark = command.len() == 1
+                && MARKS.iter().any(|(k, _)| Some(*k) == mark);
+            if is_mark {
+                let mut k = j;
+                if chars.get(k) == Some(&' ') {
+                    k += 1;
+                }
+                let braced = chars.get(k) == Some(&'{');
+                if braced {
+                    k += 1;
+                }
+                if let Some(&base) = chars.get(k) {
+                    let combining = MARKS.iter().find(|(m, _)| Some(*m) == mark).unwrap().1;
+                    let close = if braced { k + 2 } else { k + 1 };
+                    let closed = if braced {
+                        chars.get(k + 1) == Some(&'}')
+                    } else {
+                        true
+                    };
+                    let outer = chars.get(close) == Some(&'}');
+                    if closed && outer {
+                        out.push(base);
+                        out.push(combining);
+                        i = close + 1;
+                        continue;
+                    }
+                }
+            }
+            // A word-like command such as `\ss` or `\i`.
+            let name = format!("\\{command}");
+            if let Some((_, ch)) = SINGLES.iter().find(|(n, _)| *n == name) {
+                if chars.get(j) == Some(&'}') {
+                    out.push(*ch);
+                    i = j + 1;
+                    continue;
+                }
+            }
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    out.nfc().collect()
 }

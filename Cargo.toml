@@ -25,6 +25,7 @@ icu_collator = { version = "2.1.2", features = ["compiled_data"] }
 icu_locale = "2.1.1"
 md5 = "0.8.1"
 quick-xml = { version = "0.41.0", default-features = false, features = ["serialize"] }
+unicode-normalization = "0.1.26"
 
 [profile.release]
 lto = true

@@ -169,8 +169,9 @@ fn writer_uses_uppercase_sorted_fields_and_braces() {
             .all(|n| !n.chars().any(|c| c.is_ascii_lowercase())),
         "upper case"
     );
-    // A single abbreviation reference stays bare, as biber writes it.
-    assert!(text.contains(" = jomch,"), "{text}");
+    // A single abbreviation reference stays bare, and in capitals: biber writes a macro
+    // name as `JOMCH` even when the file defines it as `jomch`.
+    assert!(text.contains(" = JOMCH,"), "{text}");
 }
 
 #[test]
@@ -197,4 +198,17 @@ fn page_ranges_are_repunctuated() {
     assert_eq!(normalise_range("423--491"), "423--491");
     // A dash that is not between digits is left alone.
     assert_eq!(normalise_range("1-3 and 7a-c"), "1--3 and 7a-c");
+}
+
+#[test]
+fn accents_are_decoded_the_way_biber_writes_them() {
+    // `biber --tool` writes UTF-8, so `{\"O}zge` is `Özge`. The .bbl keeps the TeX: biblatex
+    // is the thing that interprets it.
+    use bibsmith::normalize::decode_accents;
+    assert_eq!(decode_accents("{\\\"O}zge"), "Özge");
+    assert_eq!(decode_accents("T{\\\"u}rkmen"), "Türkmen");
+    assert_eq!(decode_accents("{\\c{C}}etinkaya"), "Çetinkaya");
+    assert_eq!(decode_accents("Aks{\\i}n"), "Aksın");
+    assert_eq!(decode_accents("Unzeitgem{\\\"a}{\\ss}e"), "Unzeitgemäße");
+    assert_eq!(decode_accents("plain text"), "plain text", "nothing to do, nothing changed");
 }
