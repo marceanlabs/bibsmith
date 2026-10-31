@@ -67,8 +67,21 @@ Known, documented difference: LaTeX escapes are preserved as written (`{\"O}` st
 biber decodes them to UTF-8 (`Ö`). Decoding TeX is an encoding policy with a large surface,
 and preserving what the author wrote diffs cleanly in git.
 
-Tests now: 14 (7 CLI contract, 4 normalisation, 3 order oracle). Both modes round-trip
-through real biber with zero errors or warnings and an identical order.
+## Disambiguation, 30 October 2026
+
+`bibsmith labels` prints the `a`/`b`/`c` suffix biblatex would print, and the numbers
+match the `extradate` biber writes into the `.bbl` for all 21 entries that carry one.
+
+Two rules had to be measured, because each obvious version failed one case:
+
+| Case | What it proves |
+|---|---|
+| `baez/article` (`date = 2004`) and `baez/online` (`date = {2004-10-27}`) share a label year | extra date precision is dropped when grouping |
+| `knuth:ct` (`date = {1984/1986}`, a range) does not share one with the 1984 volume `knuth:ct:a` | a range must not collapse to its first year |
+| `set` and `stdmodel` (a `@set`) get no suffix | an entry with no name and no title is not grouped on an empty label |
+
+Tests now: 16 (8 CLI contract, 4 normalisation, 4 order and disambiguation). Both modes
+round-trip through real biber with zero errors or warnings and an identical order.
 
 ## Files
 

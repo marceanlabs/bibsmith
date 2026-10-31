@@ -136,6 +136,26 @@ fn output_may_overwrite_the_input() {
 }
 
 #[test]
+fn labels_prints_the_suffixes_biblatex_would() {
+    let out = Command::new(bin())
+        .arg("labels")
+        .arg(fixture())
+        .output()
+        .expect("run");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).expect("utf8");
+    let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+    // biber writes 21 extradates for this corpus; the first is baez/online -> a.
+    assert_eq!(lines.len(), 21, "{} lines", lines.len());
+    assert_eq!(lines[0], "baez/online\ta", "{}", lines[0]);
+    assert!(lines.contains(&"knuth:ct:e\td"), "{lines:?}");
+}
+
+#[test]
 fn check_reports_and_changes_nothing() {
     let before = std::fs::read(fixture()).expect("read fixture");
     let out = Command::new(bin())

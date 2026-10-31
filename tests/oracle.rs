@@ -75,3 +75,56 @@ fn nty_matches_biber() {
 fn ynt_matches_biber() {
     check(Scheme::Ynt, "ynt");
 }
+
+/// Disambiguation: the `a`/`b` suffix biblatex prints, taken from the `extradate`
+/// field biber writes into the `.bbl` for the same corpus and scheme.
+#[test]
+fn extradates_match_biber() {
+    use bibsmith::disambiguate;
+
+    let db = load();
+    let expected: std::collections::HashMap<String, u8> =
+        std::fs::read_to_string("oracle/extradate-nyt.tsv")
+            .expect("extradate fixture")
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| {
+                let (k, v) = l.split_once('\t').expect("tab separated");
+                (k.to_string(), v.trim().parse::<u8>().expect("number"))
+            })
+            .collect();
+
+    let entries: Vec<&biblatex::Entry> = db.iter().collect();
+    let ordered = sort_entries(&entries, Scheme::Nyt);
+    let ours = disambiguate(&ordered, Scheme::Nyt);
+
+    let mut problems = Vec::new();
+    for (key, want) in &expected {
+        match ours.get(key) {
+            Some(got) if got == want => {}
+            Some(got) => problems.push(format!("{key}: ours={got} biber={want}")),
+            None => problems.push(format!("{key}: ours=none biber={want}")),
+        }
+    }
+    for (key, got) in &ours {
+        if !expected.contains_key(key) {
+            problems.push(format!("{key}: ours={got} biber=none"));
+        }
+    }
+    problems.sort();
+    for line in &problems {
+        println!("  {line}");
+    }
+    assert!(
+        problems.is_empty(),
+        "{} of {} extradates differ: {problems:?}",
+        problems.len(),
+        expected.len()
+    );
+
+    // The suffix is the letter, not the number.
+    assert_eq!(bibsmith::suffix_for(1), "a");
+    assert_eq!(bibsmith::suffix_for(2), "b");
+    assert_eq!(bibsmith::suffix_for(26), "z");
+    assert_eq!(bibsmith::suffix_for(27), "aa");
+}

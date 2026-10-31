@@ -9,9 +9,11 @@
 //! database before it renders: field normalisation, name parsing, ordering, and
 //! disambiguation.
 
+pub mod disambiguate;
 pub mod normalize;
 pub mod sort;
 
+pub use disambiguate::{disambiguate, suffix_for};
 pub use normalize::{RawNormalised, normalise_all, normalise_raw, write_raw};
 pub use sort::{Parts, Scheme, parts as sort_parts, sort_entries};
 

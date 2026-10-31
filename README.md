@@ -15,6 +15,7 @@ One static binary. No network, no TeX Live, no biber, no runtime.
 |---|---|
 | `bibsmith sort <file>` | Sort the database and write it out (`--scheme nyt`, `-o out.bib`) |
 | `--normalise` | Rename legacy fields the way biber does (`year` to `date`, `journal` to `journaltitle`, `origyear` to `origdate`) |
+| `bibsmith labels <file>` | Print the `a`/`b` suffix biblatex would print, per entry, in sort order |
 | `bibsmith check <file>` | Report what normalising would change, and change nothing |
 | `--scheme` | `nyt`, `nty` or `ynt`, exactly as biblatex names them |
 
@@ -32,6 +33,7 @@ Every number below is a test in this repository, not a claim.
 | Order matches biber, `nty` | 92 of 92 positions |
 | Order matches biber, `ynt` | 92 of 92 positions |
 | Normalised fields match `biber --tool` | 92 of 92 entries |
+| Disambiguation suffixes match biber's `extradate` | 21 of 21 entries |
 | Our output fed back to biber | 0 errors, 0 warnings, identical order |
 | Parse round-trip on the canonical corpus | 92 of 92 entries, 0 lost fields |
 
@@ -60,8 +62,9 @@ Each was found by measuring a mismatch against biber, then confirming the rule i
 ## What it does not do
 
 - **No `.bcf` input.** biber runs from a `.bcf` written by biblatex. This reads `.bib`.
-- **No disambiguation.** `uniquename`, `uniquelist` and the `a`/`b` suffixes biblatex adds
-  when two works share an author-year are not implemented.
+- **No `uniquename` or `uniquelist`.** The `a`/`b` suffix for two works sharing an
+  author and year is implemented and matches biber; widening a name list until two
+  similar names differ is not.
 - **No remote lookups.** No DOI, ISBN or PubMed queries.
 - **LaTeX escapes are preserved, not decoded.** `{\"O}` stays `{\"O}`; `biber --tool`
   rewrites it to `Ö`. Same meaning, different bytes, and the one place a diff against

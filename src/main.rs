@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use bibsmith::{Database, normalise_all, scheme_or_default, sort_entries, write_raw};
+use bibsmith::{
+    Database, disambiguate, normalise_all, scheme_or_default, sort_entries, suffix_for, write_raw,
+};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -33,6 +35,13 @@ enum Command {
     },
     /// Report what biber would rename or drop, without writing anything
     Check { file: PathBuf },
+    /// Print the label suffix biblatex would print for each entry that needs one
+    Labels {
+        file: PathBuf,
+        /// Sorting scheme, as biblatex names it: nty, nyt or ynt
+        #[arg(long, default_value = "nyt")]
+        scheme: String,
+    },
 }
 
 fn main() -> ExitCode {
@@ -102,6 +111,24 @@ fn run(cli: Cli) -> Result<(), String> {
                     std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?
                 }
                 None => print!("{text}"),
+            }
+            Ok(())
+        }
+        Command::Labels { file, scheme } => {
+            let src = read(&file)?;
+            let db = Database::parse(&src).map_err(|e| format!("{}: {e}", file.display()))?;
+            let scheme = scheme_or_default(&scheme)?;
+            let entries: Vec<&biblatex::Entry> = db.iter().collect();
+            let ordered = sort_entries(&entries, scheme);
+            let extras = disambiguate(&ordered, scheme);
+            // Printed in sort order, because that is the order the suffixes count in.
+            for entry in &ordered {
+                if let Some(n) = extras.get(&entry.key) {
+                    println!("{}\t{}", entry.key, suffix_for(*n));
+                }
+            }
+            if extras.is_empty() {
+                println!("no entry needs a suffix: every label is already unique");
             }
             Ok(())
         }

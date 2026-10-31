@@ -90,7 +90,9 @@ impl NameOptions {
 /// biblatex's name list for sorting: `sortname`, then the author-ish fields in
 /// biblatex's fallback order. Getting this order wrong reorders corporate
 /// authors and edited volumes, which is most of the interesting cases.
-fn sort_names(entry: &Entry) -> Vec<Person> {
+/// The name list biblatex uses for both sorting and labelling. Public because
+/// disambiguation needs the same list, and two copies of this rule would drift.
+pub fn sort_names(entry: &Entry) -> Vec<Person> {
     if let Some(sortname) = plain(entry, "sortname") {
         return vec![Person {
             name: sortname,
