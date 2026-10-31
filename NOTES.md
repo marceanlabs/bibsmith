@@ -170,3 +170,12 @@ parent. The typeset pages are identical, so this is not chased further.
 - **Say what parity means in the README.** Common styles and `.bib` input, not `.bcf`
   and remote lookups. A tool that claims biber parity and misses it is worse than a
   narrower tool that states its half.
+
+## Decisions that will come up again
+
+**Name rewriting in `sort` is not behind a flag.** biber writes `Given Family` back as
+`Family, Given`, and we do the same, including its failure ("Van Morrison" becomes
+"Morrison, Van"). A drop-in replacement's promise is that nothing changes; a flag that
+makes our output differ from biber's means the parity tests stop proving equality, which
+is the only evidence this project has. A user who wants different behaviour is asking for
+a different tool.
