@@ -212,3 +212,28 @@ fn accents_are_decoded_the_way_biber_writes_them() {
     assert_eq!(decode_accents("Unzeitgem{\\\"a}{\\ss}e"), "Unzeitgemä{ß}e");
     assert_eq!(decode_accents("plain text"), "plain text", "nothing to do, nothing changed");
 }
+
+#[test]
+fn a_bibtex_only_entry_type_is_renamed_and_its_word_kept() {
+    // `@mastersthesis` is not a biblatex type. biber writes `@thesis` and keeps the word in
+    // `type`, which is what the driver prints, so nothing is lost on a round trip.
+    let src = "@mastersthesis{k, author = {A, B}, title = {T}, school = {S}, year = {2000}}\n";
+    let out: String = bibsmith::normalize::normalise_all_with(src, true)
+        .expect("normalise")
+        .iter()
+        .map(bibsmith::normalize::write_raw)
+        .collect();
+    assert!(out.contains("@THESIS{k"), "{out}");
+    assert!(out.contains("TYPE = {mathesis}"), "{out}");
+
+    // An author's own type field wins: it is what they asked to print.
+    let own = "@phdthesis{k, author = {A, B}, title = {T}, school = {S}, year = {2000}, type = {Diplomarbeit}}\n";
+    let out: String = bibsmith::normalize::normalise_all_with(own, true)
+        .expect("normalise")
+        .iter()
+        .map(bibsmith::normalize::write_raw)
+        .collect();
+    assert!(out.contains("@THESIS{k"), "{out}");
+    assert!(out.contains("Diplomarbeit"), "{out}");
+    assert!(!out.contains("phdthesis}"), "{out}");
+}

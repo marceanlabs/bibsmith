@@ -282,12 +282,26 @@ fn normalise_raw_macros(
 pub fn write_raw(entry: &RawNormalised) -> String {
     let mut out = String::new();
     out.push('@');
-    // biber writes the type and the field names in capitals.
-    out.push_str(&entry.kind.to_uppercase());
+    // biber writes the type and the field names in capitals, and renames the entry types
+    // biblatex does not know: a `@mastersthesis` is a `@thesis`, and the word BibTeX put in
+    // the type is kept in `type` so nothing is lost on the way back.
+    let lower = entry.kind.to_lowercase();
+    let (kind, implied_type) = match lower.as_str() {
+        "mastersthesis" => ("thesis", Some("mathesis")),
+        "phdthesis" => ("thesis", Some("phdthesis")),
+        "techreport" => ("report", Some("techreport")),
+        "conference" => ("inproceedings", None),
+        other => (other, None),
+    };
+    out.push_str(&kind.to_uppercase());
     out.push('{');
     out.push_str(&entry.key);
     out.push(',');
     out.push('\n');
+    let has_type = entry.fields.iter().any(|(n, _, _)| n.eq_ignore_ascii_case("type"));
+    if let Some(word) = implied_type.filter(|_| !has_type) {
+        out.push_str(&format!("  TYPE = {{{word}}},\n"));
+    }
     for (name, value, abbreviation) in &entry.fields {
         out.push_str("  ");
         out.push_str(&name.to_ascii_uppercase());
