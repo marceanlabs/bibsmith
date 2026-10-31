@@ -433,14 +433,6 @@ fn template_value(
     }
 }
 
-/// Entry options that change how a name is read: `useprefix`, `useauthor=false`.
-fn name_options(entry: &Entry, field: &str) -> Option<NameOptions> {
-    if field != "author" && field != "editor" {
-        return None;
-    }
-    Some(NameOptions::from_entry(entry))
-}
-
 /// The parts of one entry's key, read from a `.bcf` sorting template.
 pub fn template_parts(
     entry: &Entry,
