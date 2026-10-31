@@ -546,11 +546,6 @@ fn a_date_range_numbers_by_its_years_not_its_months() {
     }
     src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
     let db = biblatex::Bibliography::parse(&src).unwrap();
-    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.key, e.fields))
-        .collect();
     let ents: Vec<_> = entries
         .iter()
         .map(|(_, k)| db.get(k).unwrap())
