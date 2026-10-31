@@ -94,6 +94,44 @@ fn name_hash(people: &[Person]) -> String {
 /// and a `related` copy is not counted at all, because it is not in the list.
 const LABEL_ORDER: &[&str] = &["author", "editor", "translator", "bookauthor"];
 
+/// The text biblatex prints when it refers to an entry by title, which is what
+/// `labeltitlesource` already records.
+fn label_title(entry: &Effective) -> String {
+    let source = match entry.values.iter().any(|(k, _)| k == "shorttitle") {
+        true => "shorttitle",
+        false => "title",
+    };
+    entry
+        .values
+        .iter()
+        .find(|(k, _)| k == source)
+        .map(|(_, v)| v.trim().to_lowercase())
+        .unwrap_or_default()
+}
+
+/// `singletitle`: the entry is the only one with its title, so a style may print a short
+/// title where it prints none for a title that two entries share. Two entries called
+/// "Higher-Dimensional Algebra V" are why this is a bibliography-wide count.
+fn single_titles(entries: &[&Effective]) -> std::collections::HashSet<String> {
+    let mut seen: std::collections::HashMap<String, usize> = Default::default();
+    for entry in entries {
+        if entry.data_key.is_some() {
+            continue;
+        }
+        let title = label_title(entry);
+        if title.is_empty() {
+            continue;
+        }
+        *seen.entry(title).or_default() += 1;
+    }
+    entries
+        .iter()
+        .filter(|e| e.data_key.is_none())
+        .filter(|e| seen.get(&label_title(e)).copied().unwrap_or(0) == 1)
+        .map(|e| e.key.clone())
+        .collect()
+}
+
 /// The letter biblatex files an entry under, one per entry.
 ///
 /// The label name comes first and keeps its case — the corpus has `van Gennep`, and biber
@@ -840,6 +878,11 @@ pub fn write_bbl_scoped(
         let levels = uniqueness(ordered);
         let rank = name_ranks(ordered);
         let ranks_init = sortinits(ordered);
+        // The style asks for the annotation; `numeric` sets it to 0 and biber writes none.
+        let singles = match ctl.option("singletitle") {
+            Some("0") | Some("false") => Default::default(),
+            _ => single_titles(ordered),
+        };
         // The style decides whether a name list is ever extended: `numeric` turns
         // `uniquelist` off, and biber writes no `ul` there at all.
         let lists = if ctl.option("uniquelist") == Some("false") {
@@ -867,6 +910,7 @@ pub fn write_bbl_scoped(
                     &levels,
                     &rank,
                     &ranks_init,
+                    &singles,
                     &lists,
                     Some(
                         member_of
@@ -884,7 +928,20 @@ pub fn write_bbl_scoped(
                 continue; // written above
             }
             let inset = if entry.entryset.is_some() { Some("") } else { None };
-            write_entry(&mut out, ctl, entry, extras, labels, &levels, &rank, &ranks_init, &lists, inset, "");
+            write_entry(
+                &mut out,
+                ctl,
+                entry,
+                extras,
+                labels,
+                &levels,
+                &rank,
+                &ranks_init,
+                &singles,
+                &lists,
+                inset,
+                "",
+            );
         }
 
         out.push_str("  \\enddatalist\n");
@@ -906,6 +963,7 @@ fn write_entry(
     levels: &std::collections::HashMap<(String, String, String), u8>,
     rank: &std::collections::HashMap<String, usize>,
     ranks_init: &std::collections::HashMap<String, String>,
+    singles: &std::collections::HashSet<String>,
     lists: &std::collections::HashMap<String, usize>,
     inset: Option<&str>,
     options: &str,
@@ -1139,6 +1197,9 @@ fn write_entry(
         "title"
     };
     field(out, "labeltitlesource", title_source);
+    if singles.contains(&entry.key) {
+        out.push_str("      \\true{singletitle}\n");
+    }
 
     // The alphabetic label, and the number that disambiguates a repeated one:
     // biblatex prints the letter itself from the number.

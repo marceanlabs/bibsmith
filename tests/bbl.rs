@@ -688,3 +688,30 @@ fn a_page_range_says_how_many_pages_it_covers() {
     assert!(bbl.contains("\\bibrangessep "), "two ranges need a separator: {bbl:.600}");
     assert!(bbl.contains("\\range{pages}{59}"), "{bbl:.600}");
 }
+
+#[test]
+fn two_entries_that_share_a_title_are_not_each_the_only_one() {
+    // `\true{singletitle}` is what lets verbose-note print a short title where it prints
+    // none for a title two entries share. It is a bibliography-wide count, and the style
+    // has to ask for it: `numeric` sets the option to 0 and biber writes nothing.
+    let src = "@misc{a, author = {Smith, J.}, title = {Shared}, year = {2000}}\n\
+               @misc{b, author = {Smith, J.}, title = {Shared}, year = {2001}}\n\
+               @misc{c, author = {Smith, J.}, title = {Alone}, year = {2002}}\n";
+    let db = bibsmith::parse_lenient(src).expect("parse");
+    let raw = bibsmith::normalize::raw_expanded_entries(src).expect("raw");
+    let raw: HashMap<String, Vec<(String, String)>> =
+        raw.into_iter().map(|e| (e.key, e.fields)).collect();
+    let effective: Vec<bibsmith::merge::Effective> =
+        db.iter().map(|entry| bibsmith::merge::effective(&db, entry, &raw)).collect();
+    let refs: Vec<&bibsmith::merge::Effective> = effective.iter().collect();
+
+    let mut ctl = ControlFile::default();
+    ctl.options.insert("singletitle".into(), "1".into());
+    let bbl = write_bbl(&ctl, &refs, &HashMap::new(), &HashMap::new());
+    let single = bbl.matches("\\true{singletitle}").count();
+    assert_eq!(single, 1, "only 'Alone' has a title to itself: {bbl:.800}");
+
+    ctl.options.insert("singletitle".into(), "0".into());
+    let off = write_bbl(&ctl, &refs, &HashMap::new(), &HashMap::new());
+    assert!(!off.contains("\\true{singletitle}"));
+}

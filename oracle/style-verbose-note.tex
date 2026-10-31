@@ -1,0 +1,8 @@
+\documentclass{article}
+\usepackage[style=verbose-note,backend=biber]{biblatex}
+\addbibresource{refs.bib}
+\begin{document}
+First\footcite{knuth:ct:a}. Same again\footcite{knuth:ct:a}. Then\footcite{aksin}.
+Two at once\footcites[see][p.~3]{baez/article}[and][p.~9]{baez/online}.
+\printbibliography
+\end{document}
