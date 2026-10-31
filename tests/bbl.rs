@@ -655,3 +655,36 @@ fn a_control_character_never_reaches_the_typesetting_file() {
     assert!(!bbl.contains('\u{0}'), "a NUL survived into the .bbl");
     assert!(bbl.contains("\\field{title}"), "{bbl:.600}");
 }
+
+#[test]
+fn a_keyword_list_is_written_as_keywords_not_as_a_field() {
+    // `\field{keywords}{primary}` prints nothing: biblatex reads keywords through `\keyw`.
+    let src = "@misc{k, author = {A, B}, title = {T}, year = {2000}, keywords = {primary, secondary}}\n";
+    let db = bibsmith::parse_lenient(src).expect("parse");
+    let raw = bibsmith::normalize::raw_expanded_entries(src).expect("raw");
+    let raw: HashMap<String, Vec<(String, String)>> =
+        raw.into_iter().map(|e| (e.key, e.fields)).collect();
+    let effective: Vec<bibsmith::merge::Effective> =
+        db.iter().map(|entry| bibsmith::merge::effective(&db, entry, &raw)).collect();
+    let refs: Vec<&bibsmith::merge::Effective> = effective.iter().collect();
+    let bbl = write_bbl(&ControlFile::default(), &refs, &HashMap::new(), &HashMap::new());
+    assert!(bbl.contains("\\keyw{primary,secondary}"), "{bbl:.600}");
+    assert!(!bbl.contains("\\field{keywords}"));
+}
+
+#[test]
+fn a_page_range_says_how_many_pages_it_covers() {
+    // `\range{pages}{59}` for `431--456, 791--823`: 26 pages plus 33. A style uses it to
+    // choose between "p." and "pp." without parsing the field itself.
+    let src = "@misc{k, author = {A, B}, title = {T}, year = {2000}, pages = {431-456, 791-823}}\n";
+    let db = bibsmith::parse_lenient(src).expect("parse");
+    let raw = bibsmith::normalize::raw_expanded_entries(src).expect("raw");
+    let raw: HashMap<String, Vec<(String, String)>> =
+        raw.into_iter().map(|e| (e.key, e.fields)).collect();
+    let effective: Vec<bibsmith::merge::Effective> =
+        db.iter().map(|entry| bibsmith::merge::effective(&db, entry, &raw)).collect();
+    let refs: Vec<&bibsmith::merge::Effective> = effective.iter().collect();
+    let bbl = write_bbl(&ControlFile::default(), &refs, &HashMap::new(), &HashMap::new());
+    assert!(bbl.contains("\\bibrangessep "), "two ranges need a separator: {bbl:.600}");
+    assert!(bbl.contains("\\range{pages}{59}"), "{bbl:.600}");
+}

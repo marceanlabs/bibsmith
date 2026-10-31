@@ -263,6 +263,35 @@ fn run(cli: Cli) -> Result<(), String> {
                 slot.1 = hashed.join(",");
             }
 
+            // `\nocite{*}` brings in everything the database holds; the keys the document
+            // actually cites are the ones listed beside it. An entry only a wildcard put
+            // there is marked, which is what biber writes `\true{nocite}` for.
+            let wildcard = ctl.citekeys.iter().any(|k| k == "*");
+            let explicit: std::collections::HashSet<&str> = ctl.citekeys
+                .iter()
+                .filter(|k| *k != "*")
+                .map(|k| k.as_str())
+                .collect();
+            if wildcard {
+                let flags: HashMap<String, bool> = effective
+                    .iter()
+                    .map(|e| (e.key.clone(), !explicit.contains(e.key.as_str())))
+                    .collect();
+                for entry in effective.iter_mut() {
+                    // A `@set` is not cited itself: its members are, and biblatex leaves
+                    // the container unmarked.
+                    if entry.entryset.is_none() {
+                        entry.nocite = !explicit.contains(entry.key.as_str());
+                    }
+                }
+                // A copy is never cited itself — the document cites the entry, and the copy
+                // exists so a `related` field can find it — so biber marks every one.
+                let _ = &flags;
+                for entry in data_entries.iter_mut() {
+                    entry.nocite = true;
+                }
+            }
+
             let by_key: HashMap<&str, &bibsmith::merge::Effective> =
                 effective.iter().map(|e| (e.key.as_str(), e)).collect();
 

@@ -498,6 +498,39 @@ fn join_given_parts(given: &str) -> String {
     out
 }
 
+/// How many pages a normalised range covers: `3027--3036` is ten, `431--456, 791--823` is
+/// fifty-nine. `None` when any part is not a number, because a wrong count is worse than no
+/// count: the style would print "p." for a range.
+fn page_span(value: &str) -> Option<u32> {
+    let mut total = 0u32;
+    for part in value.split("\\bibrangessep").flat_map(|p| p.split(',')) {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let numbers: Vec<&str> = part
+            .split("\\bibrangedash")
+            .map(|n| n.trim())
+            .collect();
+        let parse = |s: &str| -> Option<u32> {
+            let digits: String = s.chars().take_while(|c| c.is_ascii_digit()).collect();
+            digits.parse().ok()
+        };
+        match numbers.as_slice() {
+            [single] => {
+                parse(single)?;
+                total += 1;
+            }
+            [first, last] => {
+                let (a, b) = (parse(first)?, parse(last)?);
+                total += b.saturating_sub(a) + 1;
+            }
+            _ => return None,
+        }
+    }
+    (total > 0).then_some(total)
+}
+
 fn field(out: &mut String, name: &str, value: &str) {
     let value = balanced(typeset(value));
     out.push_str(&format!("      \\field{{{name}}}{{{value}}}\n"));
@@ -994,10 +1027,34 @@ fn write_entry(
             // literal backslash. biber writes these values raw.
             value.clone()
         } else if crate::normalize::RANGES.contains(&key.as_str()) {
-            // biblatex prints ranges with its own macro, not a literal dash.
-            crate::normalize::normalise_range(value).replace("--", "\\bibrangedash ")
+            // biblatex prints ranges with its own macros, not a literal dash: `431--456,
+            // 791--823` is two ranges and the separator between them is `\bibrangessep`,
+            // which lets a style change it without touching the data.
+            crate::normalize::normalise_range(value)
+                .replace("--", "\\bibrangedash ")
+                // `431--456,791--823` and `431--456, 791--823` are the same two ranges, and
+                // biblatex wants the separator between them either way.
+                .replace(", ", "\\bibrangessep ")
+                .replace(',', "\\bibrangessep ")
+        } else if target == "keywords" {
+            // A keyword list is `\keyw`, not a field: biblatex reads it as its own list and
+            // `\field{keywords}` prints nothing.
+            let words: Vec<&str> = value
+                .split(',')
+                .map(|w| w.trim())
+                .filter(|w| !w.is_empty())
+                .collect();
+            out.push_str(&format!("      \\keyw{{{}}}\n", words.join(",")));
+            continue;
         } else {
             escape_ampersands(value)
+        };
+        // `\range{pages}{10}` says how many pages the entry covers, which a style uses to
+        // decide between "pp." and "p." without reading the field itself.
+        let page_count = if target == "pages" {
+            page_span(&value)
+        } else {
+            None
         };
         if ctl.fieldkinds.get(target).is_some_and(|k| k == "list") {
             let values: Vec<&str> = value
@@ -1013,6 +1070,9 @@ fn write_entry(
             verb(out, target, &value);
         } else {
             field(out, target, &value);
+            if let Some(count) = page_count {
+                out.push_str(&format!("      \\range{{pages}}{{{count}}}\n"));
+            }
         }
     }
 
@@ -1102,5 +1162,10 @@ fn write_entry(
         field(out, "extradatescope", "labelyear");
     }
 
+    // An entry that only a wildcard `\nocite{*}` pulled in is marked as such: biblatex
+    // prints it without a number in the numeric styles and the style can tell the two apart.
+    if entry.nocite {
+        out.push_str("      \\true{nocite}\n");
+    }
     out.push_str("    \\endentry\n");
 }

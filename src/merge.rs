@@ -174,6 +174,9 @@ pub struct Effective {
     /// A name that cannot be parsed, as biber reports it. The entry is then skipped:
     /// one bad author must not shift every label after it.
     pub malformed_name: Option<String>,
+    /// The entry is in the bibliography only because of a wildcard `\nocite{*}`, never
+    /// because the document cited it. biblatex prints it differently and needs to know.
+    pub nocite: bool,
 }
 
 /// The entry type as biblatex spells it.
@@ -381,5 +384,6 @@ pub fn effective(
         names,
         entryset,
         malformed_name,
+        nocite: false,
     }
 }
