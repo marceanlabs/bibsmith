@@ -29,3 +29,4 @@ oracle/**/*.ours
 # The control file the tests read: it is how biblatex describes the document, not a
 # build artefact, and the tests cannot run without it.
 !oracle/nyt.bcf
+!oracle/style-nyvt.bcf
