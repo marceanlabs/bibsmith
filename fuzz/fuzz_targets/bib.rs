@@ -37,4 +37,32 @@ fuzz_target!(|data: &[u8]| {
     // the output would make every build a different file for the same bibliography.
     let again = bibsmith::write_bbl(&ctl, &refs, &HashMap::new(), &HashMap::new());
     assert_eq!(out, again, "rendering is not deterministic");
+
+    // A file that half-writes is worse than one that fails: LaTeX reads the `.bbl` and
+    // reports an error a hundred lines away. Every entry that opens must close, the file
+    // must end, and nothing may carry a byte a `.bbl` cannot hold.
+    assert!(out.ends_with("\\endinput\n"), "the file must end: {:?}", &out[out.len().saturating_sub(40)..]);
+    assert_eq!(
+        out.matches("\\entry{").count(),
+        out.matches("\\endentry").count(),
+        "an entry was opened and not closed"
+    );
+    assert!(!out.contains('\0'), "a NUL byte reached the output");
+    // A brace that is escaped is not a group: `\{IEEE\}` is a literal brace, and counting
+    // it would make every value that had to be escaped look unbalanced.
+    let (mut opens, mut closes) = (0i64, 0i64);
+    let mut it = out.chars().peekable();
+    while let Some(c) = it.next() {
+        if c == '\\' {
+            // `\\`, `\{` and `\}`: the next character belongs to the command.
+            it.next();
+            continue;
+        }
+        match c {
+            '{' => opens += 1,
+            '}' => closes += 1,
+            _ => {}
+        }
+    }
+    assert_eq!(opens, closes, "the braces of the output do not balance");
 });

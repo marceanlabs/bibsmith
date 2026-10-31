@@ -634,3 +634,24 @@ fn the_index_letter_follows_the_label_name_and_keeps_its_case() {
     assert_eq!(field_of("brandt", "sortinit").as_deref(), Some("B"));
     assert_eq!(field_of("britannica", "sortinit").as_deref(), Some("E"));
 }
+
+#[test]
+fn a_control_character_never_reaches_the_typesetting_file() {
+    // A NUL from a truncated export, a stray BEL: TeX cannot hold either. biber gives up on
+    // the whole file when it meets one, leaving the user with no bibliography at all; the
+    // entry is kept here and the byte is dropped.
+    let src = "@misc{k, title = {A\u{0}B}, author = {C, D}, year = {2000}}\n";
+    let db = bibsmith::parse_lenient(src).expect("parse");
+    let raw = bibsmith::normalize::raw_expanded_entries(src).expect("raw");
+    let raw: HashMap<String, Vec<(String, String)>> =
+        raw.into_iter().map(|e| (e.key, e.fields)).collect();
+    let effective: Vec<bibsmith::merge::Effective> = db
+        .iter()
+        .map(|entry| bibsmith::merge::effective(&db, entry, &raw))
+        .collect();
+    let refs: Vec<&bibsmith::merge::Effective> = effective.iter().collect();
+    let ctl = ControlFile::default();
+    let bbl = write_bbl(&ctl, &refs, &HashMap::new(), &HashMap::new());
+    assert!(!bbl.contains('\u{0}'), "a NUL survived into the .bbl");
+    assert!(bbl.contains("\\field{title}"), "{bbl:.600}");
+}

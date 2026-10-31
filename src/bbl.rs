@@ -419,12 +419,12 @@ fn name_block(
             name_hash(std::slice::from_ref(p))
         ));
         if !p.prefix.is_empty() {
-            out.push_str(&format!("           prefix={{{}}},\n", p.prefix));
+            out.push_str(&format!("           prefix={{{}}},\n", balanced(typeset(&p.prefix))));
         }
-        out.push_str(&format!("           family={{{}}},\n", p.name));
+        out.push_str(&format!("           family={{{}}},\n", balanced(typeset(&p.name))));
         out.push_str(&format!(
             "           familyi={{{}}},\n",
-            initials(&p.name, "\\bibinitperiod")
+            balanced(typeset(&initials(&p.name, "\\bibinitperiod")))
         ));
         if !p.given_name.is_empty() {
             // Parts of a given name are joined the way biber joins them: after an
@@ -432,14 +432,14 @@ fn name_block(
             // after a word the wider `\bibnamedelima`. One space for both reflows the
             // page: "G. E. L. Owen" breaks in the wrong place.
             let given = join_given_parts(&p.given_name);
-            out.push_str(&format!("           given={{{given}}},\n"));
+            out.push_str(&format!("           given={{{}}},\n", balanced(typeset(&given))));
             out.push_str(&format!(
                 "           giveni={{{}}},\n",
-                initials(&p.given_name, "\\bibinitperiod")
+                balanced(typeset(&initials(&p.given_name, "\\bibinitperiod")))
             ));
         }
         if !p.suffix.is_empty() {
-            out.push_str(&format!("           suffix={{{}}},\n", p.suffix));
+            out.push_str(&format!("           suffix={{{}}},\n", balanced(typeset(&p.suffix))));
         }
         // No blank line here: `\name` scans its argument, and a blank line is a `\par`,
         // which ends the scan and spills the rest of the attributes onto the page.
@@ -499,21 +499,102 @@ fn join_given_parts(given: &str) -> String {
 }
 
 fn field(out: &mut String, name: &str, value: &str) {
+    let value = balanced(typeset(value));
     out.push_str(&format!("      \\field{{{name}}}{{{value}}}\n"));
+}
+
+/// Remove the bytes TeX cannot hold.
+///
+/// A `.bib` exported from a database sometimes carries a control character — a NUL from a
+/// truncated write, a stray BEL. biber gives up on such a file and writes no `.bbl` at all,
+/// which leaves the user with no bibliography and no message; the character cannot be
+/// typeset either way, so it is dropped and the rest of the entry is kept.
+/// Escape the braces of a value whose braces do not pair up.
+///
+/// A `.bib` written by hand or damaged in transit can hold `{Proceeding{ of the {IEEE}`,
+/// and writing that into `\field{…}{…}` leaves LaTeX scanning for a brace that never
+/// comes: the error lands a hundred lines later and blames the wrong entry. A value whose
+/// braces do pair up is left alone, because those braces are grouping that biblatex needs.
+fn balanced(value: String) -> String {
+    // A value ending in a single backslash escapes the closing brace that follows it, and
+    // the field runs into the next one: `prefix={ineGreenwoo\}` swallows its own delimiter.
+    let mut value = value;
+    let trailing = value.chars().rev().take_while(|c| *c == '\\').count();
+    if trailing % 2 == 1 {
+        value.push('\\');
+    }
+    // A brace that is already escaped is a literal brace, not a group: `\{V\}` is how a
+    // `.bib` protects a capital V, and counting it as a group would escape it a second time.
+    let mut depth: i32 = 0;
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                chars.next();
+            }
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth < 0 {
+                    return escape_bare_braces(&value);
+                }
+            }
+            _ => {}
+        }
+    }
+    if depth == 0 {
+        return value;
+    }
+    escape_bare_braces(&value)
+}
+
+/// Escape the braces that group, leaving the ones the author already escaped alone.
+fn escape_bare_braces(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 8);
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                out.push(c);
+                if let Some(next) = chars.next() {
+                    out.push(next);
+                }
+            }
+            '{' => out.push_str("\\{"),
+            '}' => out.push_str("\\}"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+fn typeset(value: &str) -> String {
+    let mut out: String = value
+        .chars()
+        .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
+        .collect();
+    // Removing a control character from the end of `Knuth\x02` leaves the value ending in
+    // a backslash, which then escapes whatever follows it — the closing brace of the field.
+    // An odd run of backslashes at the end must be made even.
+    let trailing = out.chars().rev().take_while(|c| *c == '\\').count();
+    if trailing % 2 == 1 {
+        out.push('\\');
+    }
+    out
 }
 
 /// A list-valued field: `location`, `publisher` and the rest of the `list` kind.
 fn list(out: &mut String, name: &str, values: &[&str]) {
     out.push_str(&format!("      \\list{{{name}}}{{{}}}{{%\n", values.len()));
     for value in values {
-        out.push_str(&format!("        {{{value}}}%\n"));
+        out.push_str(&format!("        {{{}}}%\n", balanced(typeset(value))));
     }
     out.push_str("      }\n");
 }
 
 fn verb(out: &mut String, name: &str, value: &str) {
     out.push_str(&format!("      \\verb{{{name}}}\n"));
-    out.push_str(&format!("      \\verb {value}\n"));
+    out.push_str(&format!("      \\verb {}\n", typeset(value)));
     out.push_str("      \\endverb\n");
 }
 
@@ -777,7 +858,9 @@ pub fn write_bbl_scoped(
         out.push_str("\\endrefsection\n");
     }
     out.push_str("\\endinput\n");
-    out
+    // One pass over the finished file: a control character can arrive through a key, a name
+    // or a field, and none of them can be typeset.
+    typeset(&out)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -803,7 +886,8 @@ fn write_entry(
         None => (entry.key.as_str(), options),
     };
     out.push_str(&format!(
-        "    \\entry{{{entry_key}}}{{{}}}{{{options}}}{{}}\n",
+        "    \\entry{{{}}}{{{}}}{{{options}}}{{}}\n",
+        balanced(entry_key.to_string()),
         entry.kind
     ));
 

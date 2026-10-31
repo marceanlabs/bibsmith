@@ -146,3 +146,12 @@ fn a_crossref_inside_a_damaged_entry_is_still_not_followed() {
     assert!(ok, "stderr: {err}");
     assert!(out.contains("@BOOK{c,"), "later entries must survive: {out}");
 }
+
+#[test]
+fn a_value_ending_in_a_backslash_does_not_swallow_its_delimiter() {
+    // `given = {Knuth\}` escapes the closing brace and the rest of the entry spills onto the
+    // page. A stray backslash at the end of a value is made even.
+    let (ok, out, err) = run("slash.bib", b"@misc{k, author = {Knuth\\, Donald E.}, title = {T}, year = {2000}}\n");
+    assert!(ok, "stderr: {err}");
+    assert!(out.contains("KNUTH") || out.contains("Knuth"), "{out}");
+}
