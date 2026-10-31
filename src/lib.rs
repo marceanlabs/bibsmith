@@ -32,6 +32,31 @@ pub fn scheme_or_default(s: &str) -> Result<Scheme, String> {
     })
 }
 
+/// Parse a database, defining any abbreviation the file uses but never declares.
+///
+/// The `biblatex` crate refuses such a file outright (`unknown abbreviation "JACM"`), and
+/// real files do it: a `.bib` written against a house style assumes the macro is shared.
+/// biber warns and prints the name as written, so the definition it is missing is the
+/// name itself, and the retry is what biber's behaviour costs.
+pub fn parse_lenient(src: &str) -> Result<biblatex::Bibliography, biblatex::ParseError> {
+    let mut prelude = String::new();
+    for _ in 0..64 {
+        let mut text = String::with_capacity(prelude.len() + src.len());
+        text.push_str(&prelude);
+        text.push_str(src);
+        match biblatex::Bibliography::parse(&text) {
+            Err(e) if matches!(e.kind, biblatex::ParseErrorKind::UnknownAbbreviation(_)) => {
+                let biblatex::ParseErrorKind::UnknownAbbreviation(name) = e.kind else {
+                    unreachable!()
+                };
+                prelude.push_str(&format!("@string{{{name} = \"{name}\"}}\n"));
+            }
+            other => return other,
+        }
+    }
+    biblatex::Bibliography::parse(src)
+}
+
 /// One bibliography database, as parsed.
 pub struct Database {
     inner: biblatex::Bibliography,
@@ -41,7 +66,7 @@ pub struct Database {
 impl Database {
     pub fn parse(src: &str) -> Result<Self, biblatex::ParseError> {
         Ok(Self {
-            inner: biblatex::Bibliography::parse(src)?,
+            inner: parse_lenient(src)?,
             strings: raw_string_blocks(src),
         })
     }

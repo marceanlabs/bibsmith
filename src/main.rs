@@ -158,7 +158,7 @@ fn run(cli: Cli) -> Result<(), String> {
                 src.push('\n');
             }
 
-            let db = biblatex::Bibliography::parse(&src)
+            let db = bibsmith::parse_lenient(&src)
                 .map_err(|e| format!("{}: {e}", bcf.display()))?;
 
             // `\nocite{*}` reaches the control file as a literal `*`, and means every

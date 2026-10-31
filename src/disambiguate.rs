@@ -87,6 +87,11 @@ fn label_year(entry: &Entry) -> String {
 pub fn disambiguate(ordered: &[&Entry], _scheme: Scheme) -> HashMap<String, u8> {
     let mut groups: HashMap<(String, String), Vec<&Entry>> = HashMap::new();
     for entry in ordered {
+        // biblatex applies no extradate to an entry with no name to disambiguate: ten
+        // copies of one nameless record print "(1984)" ten times, not 1984a…1984j.
+        if sort_names(entry).is_empty() {
+            continue;
+        }
         groups
             .entry((label_names(entry), label_year(entry)))
             .or_default()

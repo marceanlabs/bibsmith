@@ -147,7 +147,7 @@ fn person_key(p: &Person) -> String {
     s
 }
 
-fn name_part(entry: &Entry) -> String {
+fn name_part(entry: &Entry) -> Vec<String> {
     let names = sort_names(entry);
     if names.is_empty() {
         // BibTeX's legacy `key` field is what a manual or a web page uses to say where
@@ -156,19 +156,12 @@ fn name_part(entry: &Entry) -> String {
         // without an author or editor.
         if let Some(key) = plain(entry, "key").or_else(|| plain(entry, "sortkey")) {
             if !key.trim().is_empty() {
-                return key;
+                return vec![key];
             }
         }
-        return title_part(entry);
+        return vec![title_part(entry)];
     }
-    let mut out = String::new();
-    for (i, p) in names.iter().enumerate() {
-        if i > 0 {
-            out.push(SEP);
-        }
-        out.push_str(&person_key(p));
-    }
-    out
+    names.iter().map(person_key).collect()
 }
 
 fn year_part(entry: &Entry) -> String {
@@ -217,7 +210,17 @@ fn title_part(entry: &Entry) -> String {
 /// into one string: a separator character would have to be collation-ignorable to
 /// work, and byte comparison of the joined form sorts `vázques` after `vizedom`
 /// because `á` is two bytes above `i`. That exact case is in the corpus.
-pub type Parts = Vec<String>;
+/// The slots of a sort key, compared in order.
+///
+/// A slot holds a list because the name slot does: biblatex compares name lists person by
+/// person, and a list that runs out sorts first. Joining the names into one string cannot
+/// reproduce that — the collator ignores the separator, so `Smith, John and Jones` and
+/// `Smith, John A.` compare only on "Smith John", and the second name never gets a say.
+pub type Parts = Vec<Vec<String>>;
+
+fn one(s: String) -> Vec<String> {
+    vec![s]
+}
 
 /// The parts of one entry's sort key, in comparison order. Public because
 /// explaining an order is a feature: `bibsmith sort --explain` prints these.
@@ -245,27 +248,27 @@ fn key_parts_inner(
     }
     match scheme {
         Scheme::Nty => vec![
-            presort_part(entry),
+            one(presort_part(entry)),
             name_part(entry),
-            title_part(entry),
-            year_part(entry),
-            volume_part(entry),
-            sortkey_part(entry),
+            one(title_part(entry)),
+            one(year_part(entry)),
+            one(volume_part(entry)),
+            one(sortkey_part(entry)),
         ],
         Scheme::Nyt => vec![
-            presort_part(entry),
+            one(presort_part(entry)),
             name_part(entry),
-            year_part(entry),
-            title_part(entry),
-            volume_part(entry),
-            sortkey_part(entry),
+            one(year_part(entry)),
+            one(title_part(entry)),
+            one(volume_part(entry)),
+            one(sortkey_part(entry)),
         ],
         Scheme::Ynt => vec![
-            presort_part(entry),
-            year_part_or(entry, "9999"),
+            one(presort_part(entry)),
+            one(year_part_or(entry, "9999")),
             name_part(entry),
-            title_part(entry),
-            sortkey_part(entry),
+            one(title_part(entry)),
+            one(sortkey_part(entry)),
         ],
     }
 }
@@ -309,7 +312,15 @@ fn compare_parts(
     b: &Parts,
 ) -> std::cmp::Ordering {
     for (pa, pb) in a.iter().zip(b.iter()) {
-        let ord = collator.compare(pa, pb);
+        for (xa, xb) in pa.iter().zip(pb.iter()) {
+            let ord = collator.compare(xa, xb);
+            if ord != std::cmp::Ordering::Equal {
+                return ord;
+            }
+        }
+        // A name list that runs out sorts first: `Smith, John` before `Smith, John and
+        // Jones`.
+        let ord = pa.len().cmp(&pb.len());
         if ord != std::cmp::Ordering::Equal {
             return ord;
         }
