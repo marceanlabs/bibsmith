@@ -47,10 +47,6 @@ fn plain(entry: &Entry, field: &str) -> Option<String> {
     entry.get(field).map(|chunks| chunks.format_verbatim())
 }
 
-fn people(entry: &Entry, field: &str) -> Vec<Person> {
-    entry.get_as::<Vec<Person>>(field).unwrap_or_default()
-}
-
 /// Entry-level `options = {...}` switches that change which name list is used.
 /// Both cases in the corpus are real: `britannica` sets `useeditor=false` and must
 /// therefore sort by its title, and `vangennep` sets `useprefix` to file under V.
@@ -116,7 +112,9 @@ pub fn sort_names(entry: &Entry) -> Vec<Person> {
         if !allowed {
             continue;
         }
-        let mut p = people(entry, field);
+        // The repaired reading is used here too: an entry whose author string the parser
+        // cannot split would otherwise sort to the front of the bibliography.
+        let mut p = crate::names::names(entry, field);
         if !p.is_empty() {
             if opts.use_prefix {
                 for person in p.iter_mut() {

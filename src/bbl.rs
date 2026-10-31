@@ -212,17 +212,26 @@ fn month_number(month: &str) -> Option<u8> {
         "november",
         "december",
     ];
-    let cleaned: String = month
+    // `Jan.-March` is January: the range starts there, and the rest is noise.
+    let head = month.split(['-', '/']).next().unwrap_or(month);
+    let cleaned: String = head
         .chars()
         .filter(|c| c.is_alphabetic())
         .collect::<String>()
         .to_lowercase();
-    if cleaned.is_empty() {
+    if cleaned.len() < 3 {
         return None;
     }
+    // Three letters identify every month in English, so `Oct.`, `October` and `oct` all
+    // agree — and a full-name comparison misses the abbreviation.
+    if !head.trim_start().starts_with(|c: char| c.is_alphabetic()) {
+        // A year-like or junk value (`10~1`) is passed through exactly as written.
+        return None;
+    }
+    let prefix: String = cleaned.chars().take(3).collect();
     NAMES
         .iter()
-        .position(|name| name.starts_with(&cleaned) || cleaned.starts_with(name))
+        .position(|name| name.starts_with(&prefix))
         .map(|i| i as u8 + 1)
 }
 
@@ -465,8 +474,17 @@ fn write_entry(
     // Values are the macro-expanded ones: a corpus entry that says
     // `journaltitle = JOMCH` must print "J. Organomet. Chem.", and expanding is not the
     // same as decoding, so `{\TeX}` still prints as TeX.
+    // A field written under both its old and new name keeps the new one: `location`
+    // beats `address`, and writing both leaves the last one printed, which is the old
+    // value.
+    let spelled: std::collections::HashSet<&str> =
+        entry.values.iter().map(|(k, _)| k.as_str()).collect();
+
     for (key, value) in &entry.values {
         if SKIP_FIELDS.contains(&key.as_str()) || NAME_FIELDS.contains(&key.as_str()) {
+            continue;
+        }
+        if crate::normalize::renamed_field(key).is_some_and(|target| spelled.contains(target)) {
             continue;
         }
         let target = crate::normalize::renamed_field(key).unwrap_or(key.as_str());
@@ -498,22 +516,32 @@ fn write_entry(
     }
 
     // biblatex counts date parts, never the date itself. An entry may carry a `date`
-    // or the older `year`/`month`, and both have to reach it as parts.
+    // or the older `year`/`month`/`day`, and both have to reach it as parts — but a
+    // legacy month is not a date: `Jan.-March` is one month, and splitting it on the
+    // dash hands biblatex a day of "March".
     match entry.values.iter().find(|(k, _)| k == "date") {
         Some((_, date)) => date_parts(out, "", date),
         None => {
             if let Some((_, year)) = entry.values.iter().find(|(k, _)| k == "year") {
-                let mut combined = year.clone();
-                for part in ["month", "day"] {
-                    if let Some((_, v)) = entry.values.iter().find(|(k, _)| k == part) {
-                        combined.push('-');
-                        combined.push_str(v);
-                    }
+                let digits: Vec<char> = year.chars().filter(|c| c.is_ascii_digit()).collect();
+                if !digits.is_empty() {
+                    field(out, "year", &digits[..digits.len().min(4)].iter().collect::<String>());
                 }
-                date_parts(out, "", &combined);
             }
+            if let Some((_, month)) = entry.values.iter().find(|(k, _)| k == "month") {
+                let month = month_number(month)
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| month.trim().to_string());
+                field(out, "month", &month);
+            }
+            // A legacy `day` is never written. biber emits a day only from a `date`, and
+            // on a `year`/`month`/`day` entry it prints "Mar. 2008" — the 5 is dropped.
+            field(out, "dateera", "ce");
         }
     }
+
+    // The other date fields keep their prefix: `urldate` gives urlyear/urlmonth/urlday,
+    // `eventdate` gives eventyear… and the end of a range gives eventendyear.
     for (name, prefix) in [
         ("urldate", "url"),
         ("eventdate", "event"),

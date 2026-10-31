@@ -286,3 +286,95 @@ fn a_key_cited_twice_is_written_once() {
     let count = ctl.citekeys.iter().filter(|k| *k == "knuth:ct").count();
     assert_eq!(count, 1, "a repeated citation must not become a repeated entry");
 }
+
+#[test]
+fn xdata_fields_are_merged_and_win() {
+    // Measured against biber: an entry with `location = {Cambridge}` and an xdata
+    // `location = {Oxford}` prints Oxford, so the inherited value wins.
+    let src = std::fs::read_to_string(oracle("xdata/x.bib")).expect("fixture");
+    let db = biblatex::Bibliography::parse(&src).expect("parse");
+    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+        .expect("raw")
+        .into_iter()
+        .map(|e| (e.key, e.fields))
+        .collect();
+    let eff = bibsmith::merge::effective(&db, db.get("second").expect("entry"), &raw);
+    let value = |name: &str| {
+        eff.values
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default()
+    };
+    assert_eq!(value("publisher"), "Shared Press");
+    assert_eq!(value("location"), "Oxford", "the xdata value wins over the entry's own");
+}
+
+#[test]
+fn a_bibtex_only_type_becomes_the_biblatex_type_and_a_type_field() {
+    let mut src = String::from("@mastersthesis{m, author = {A, B}, title = {T}, school = {S}, year = {1999}}\n");
+    src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
+    let db = biblatex::Bibliography::parse(&src).unwrap();
+    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.key, e.fields))
+        .collect();
+    let eff = bibsmith::merge::effective(&db, db.get("m").unwrap(), &raw);
+    assert_eq!(eff.kind, "thesis", "biblatex has no mastersthesis type");
+    assert!(eff.values.iter().any(|(k, v)| k == "type" && v == "mathesis"));
+}
+
+#[test]
+fn a_month_name_is_written_as_a_number_and_a_range_starts_where_it_starts() {
+    for (input, want) in [("January", "1"), ("Oct.", "10"), ("Jan.-March", "1"), ("10~1", "10~1")] {
+        let mut src = format!("@misc{{m, author = {{A, B}}, title = {{T}}, year = {{2001}}, month = {{{input}}}}}\n");
+        src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
+        let db = biblatex::Bibliography::parse(&src).unwrap();
+        let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.key, e.fields))
+            .collect();
+        let eff = bibsmith::merge::effective(&db, db.get("m").unwrap(), &raw);
+        let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
+        let ctl = ControlFile::parse(&xml).unwrap();
+        let bbl = write_bbl(&ctl, &[&eff], &HashMap::new(), &HashMap::new());
+        assert!(
+            bbl.contains(&format!("\\field{{month}}{{{want}}}")),
+            "month {input:?} should be {want}"
+        );
+    }
+}
+
+#[test]
+fn an_explicit_location_beats_the_old_address_field() {
+    let mut src = String::from("@book{b, author = {A, B}, title = {T}, year = {1990}, location = {Florence}, address = {New York}}\n");
+    src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
+    let db = biblatex::Bibliography::parse(&src).unwrap();
+    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.key, e.fields))
+        .collect();
+    let eff = bibsmith::merge::effective(&db, db.get("b").unwrap(), &raw);
+    let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
+    let ctl = ControlFile::parse(&xml).unwrap();
+    let bbl = write_bbl(&ctl, &[&eff], &HashMap::new(), &HashMap::new());
+    assert!(bbl.contains("{Florence}"), "the new name wins");
+    assert!(!bbl.contains("{New York}"), "the old name must not be written as well");
+}
+
+#[test]
+fn an_empty_author_means_no_author() {
+    let mut src = String::from("@proceedings{emptyauthor, author = {}, title = {CHI}, year = {2008}}\n");
+    src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
+    let db = biblatex::Bibliography::parse(&src).unwrap();
+    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.key, e.fields))
+        .collect();
+    let eff = bibsmith::merge::effective(&db, db.get("emptyauthor").unwrap(), &raw);
+    assert!(eff.names.is_empty(), "a phantom person sorts the entry to the front");
+}

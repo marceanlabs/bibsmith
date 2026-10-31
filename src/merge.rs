@@ -179,9 +179,34 @@ pub struct Effective {
 /// prints `Unknown("underreview")`, which biblatex cannot resolve: the entry is then
 /// dropped from the list. biber writes the name the author used.
 fn kind_of(entry: &Entry) -> String {
-    match &entry.entry_type {
+    let raw = match &entry.entry_type {
         biblatex::EntryType::Unknown(name) => name.to_ascii_lowercase(),
         other => format!("{other:?}").to_ascii_lowercase(),
+    };
+    match raw.as_str() {
+        "mastersthesis" => "thesis".to_string(),
+        "phdthesis" => "thesis".to_string(),
+        "techreport" => "report".to_string(),
+        "conference" => "inproceedings".to_string(),
+        "electronic" | "www" => "online".to_string(),
+        _ => raw,
+    }
+}
+
+/// The `type` biblatex implies from a BibTeX-only entry type.
+///
+/// `@mastersthesis` is a `thesis` with `type = {mathesis}`: without it the driver prints
+/// the title and year and nothing else, and the "MA thesis." line disappears.
+fn implied_type(entry: &Entry) -> Option<&'static str> {
+    let raw = match &entry.entry_type {
+        biblatex::EntryType::Unknown(name) => name.to_ascii_lowercase(),
+        other => format!("{other:?}").to_ascii_lowercase(),
+    };
+    match raw.as_str() {
+        "mastersthesis" => Some("mathesis"),
+        "phdthesis" => Some("phdthesis"),
+        "techreport" => Some("techreport"),
+        _ => None,
     }
 }
 
@@ -208,10 +233,9 @@ pub fn effective(
         .collect();
     let mut names: Vec<(String, Vec<Person>)> = Vec::new();
     for field in NAME_FIELDS {
-        if let Ok(people) = entry.get_as::<Vec<Person>>(field) {
-            if !people.is_empty() {
-                names.push((field.to_string(), people));
-            }
+        let people = crate::names::names(entry, field);
+        if !people.is_empty() {
+            names.push((field.to_string(), people));
         }
     }
     let entryset = entry
@@ -230,6 +254,36 @@ pub fn effective(
                 .map(|name| name.trim().to_string())
         })
     });
+
+    // `xdata` is a list of entries whose fields are merged in. Measured against biber:
+    // the inherited value wins over the entry's own, so this overwrites rather than
+    // fills — an entry with `location = {Cambridge}` and an xdata `location = {Oxford}`
+    // prints Oxford.
+    let xdata_list = values
+        .iter()
+        .find(|(k, _)| k == "xdata")
+        .map(|(_, v)| v.clone());
+    if let Some(list) = xdata_list {
+        for source in list.split(',').map(|k| k.trim()).filter(|k| !k.is_empty()) {
+            let Some(shared) = raw.get(source) else { continue };
+            for (name, value) in shared {
+                if NO_INHERIT.contains(&name.as_str()) || NAME_FIELDS.contains(&name.as_str()) {
+                    continue;
+                }
+                match values.iter_mut().find(|(k, _)| k == name) {
+                    Some(slot) => slot.1 = value.clone(),
+                    None => values.push((name.clone(), value.clone())),
+                }
+            }
+        }
+    }
+
+    // A BibTeX-only type implies a `type` field, and an explicit one wins.
+    if let Some(name) = implied_type(entry) {
+        if !values.iter().any(|(k, _)| k == "type") {
+            values.push(("type".to_string(), name.to_string()));
+        }
+    }
 
     let mut child_kind = kind_of(entry);
     let mut seen: Vec<String> = vec![entry.key.clone()];
@@ -280,10 +334,9 @@ pub fn effective(
             if names.iter().any(|(k, _)| k == field) {
                 continue;
             }
-            if let Ok(people) = parent.get_as::<Vec<Person>>(field) {
-                if !people.is_empty() {
-                    names.push((field.to_string(), people));
-                }
+            let people = crate::names::names(parent, field);
+            if !people.is_empty() {
+                names.push((field.to_string(), people));
             }
         }
 
