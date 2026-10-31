@@ -250,9 +250,7 @@ pub fn effective(
             names.push((field.to_string(), people));
         }
     }
-    let entryset = entry
-        .get("entryset")
-        .map(crate::normalize::render_value);
+    let entryset = entry.get("entryset").map(crate::normalize::render_value);
 
     // Checked on the raw text: the parser quietly accepts `Werneck,, Renato`, and the
     // double comma is exactly what biber refuses. One bad author must not shift every
@@ -277,7 +275,9 @@ pub fn effective(
         .map(|(_, v)| v.clone());
     if let Some(list) = xdata_list {
         for source in list.split(',').map(|k| k.trim()).filter(|k| !k.is_empty()) {
-            let Some(shared) = raw.get(source) else { continue };
+            let Some(shared) = raw.get(source) else {
+                continue;
+            };
             for (name, value) in shared {
                 if NO_INHERIT.contains(&name.as_str()) || NAME_FIELDS.contains(&name.as_str()) {
                     continue;

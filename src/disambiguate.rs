@@ -46,7 +46,13 @@ fn label_names(entry: &Entry) -> String {
     // need no 2020a/2020b. Two entries by the same `Smith, John` still do.
     names
         .iter()
-        .map(|p| format!("{}\u{1}{}", p.name.to_lowercase(), p.given_name.to_lowercase()))
+        .map(|p| {
+            format!(
+                "{}\u{1}{}",
+                p.name.to_lowercase(),
+                p.given_name.to_lowercase()
+            )
+        })
         .collect::<Vec<_>>()
         .join("\u{2}")
 }

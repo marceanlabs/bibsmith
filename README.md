@@ -1,27 +1,52 @@
 # bibsmith
 
-Sort a `.bib` file the way biblatex sorts it, without Perl and without a TeX install.
+Write the `.bbl` that biblatex typesets, in Rust, without Perl or a TeX install.
 
 ```console
 $ cargo install bibsmith
-$ bibsmith sort refs.bib --scheme nyt > sorted.bib
+$ pdflatex paper.tex            # writes paper.bcf
+$ bibsmith bbl paper.bcf        # writes paper.bbl, which biber would have written
+$ pdflatex paper.tex && pdflatex paper.tex
 ```
 
-One static binary. No network, no TeX Live, no biber, no runtime.
+One static binary. The `.bbl` it writes is byte-comparable with biber's, and the
+bibliography it typesets is identical: 18 documents, six styles, the canonical corpus, a
+real ACM bibliography and BibTeX's own torture sample.
 
-## What it does
+## How it fits a build
+
+biblatex's `backend=` option accepts `biber`, `bibtex` and `bibtex8`, so bibsmith cannot be
+swapped in by changing one word. It replaces the biber *step*:
+
+```console
+$ bibsmith bbl paper.bcf        # instead of: biber paper
+```
+
+Or wire it into latexmk, which already knows the three passes:
+
+```perl
+# .latexmkrc
+$biber = 'bibsmith bbl %O %S.bcf';
+```
+
+## Commands
 
 | Command | What it does |
 |---|---|
-| `bibsmith sort <file>` | Sort the database and write it out (`--scheme nyt`, `-o out.bib`) |
-| `--normalise` | Rename legacy fields the way biber does (`year` to `date`, `journal` to `journaltitle`, `origyear` to `origdate`) |
-| `bibsmith labels <file>` | Print the `a`/`b` suffix biblatex would print, per entry, in sort order |
-| `bibsmith check <file>` | Report what normalising would change, and change nothing |
-| `--scheme` | `nyt`, `nty` or `ynt`, exactly as biblatex names them |
+| `bibsmith bbl <file.bcf>` | Write the `.bbl` biblatex reads: every entry, every field, the disambiguation suffixes, the sorting template the document declared |
+| `bibsmith sort <file.bib>` | Sort a database the way biblatex sorts it (`--scheme nyt`, `-o out.bib`) |
+| `--normalise` | Rename legacy fields the way `biber --tool` does (`year` to `date`, `journal` to `journaltitle`) |
+| `bibsmith check <file.bib>` | Report what normalising would change, and change nothing |
+| `bibsmith labels <file.bib>` | Print the `a`/`b` suffix biblatex would print, in sort order |
+| `bibsmith fetch <file.bib>` | Ask Crossref about every DOI and print the fields the entries lack; `--write` adds them |
 
-`sort` reads `@string` definitions and every entry type biblatex knows, and writes the same
-entries in biblatex's order. Exit codes: 0 written, 1 the file could not be read or parsed,
-2 bad arguments.
+Exit codes: 0 written, 1 the file could not be read or parsed, 2 bad arguments.
+
+`bbl` reads the sorting template out of the `.bcf` rather than recognising a scheme name,
+so `nyt`, `nty`, `ynt`, `nyvt`, `ydnt`, `anyt` and templates a package invents all work.
+Each `\refsection` is its own namespace, `@set` members print through `\inset`, `related`
+entries are written under the hash biblatex looks them up by, and a `crossref` loop is
+survived rather than followed.
 
 ## Measured
 
@@ -29,71 +54,61 @@ Every number below is a test in this repository, not a claim.
 
 | Check | Result |
 |---|---|
-| Order matches biber, `nyt` | 92 of 92 positions |
-| Order matches biber, `nty` | 92 of 92 positions |
-| Order matches biber, `ynt` | 92 of 92 positions |
-| Normalised fields match `biber --tool` | 92 of 92 entries |
-| Disambiguation suffixes match biber's `extradate` | 21 of 21 entries |
-| Our output fed back to biber | 0 errors, 0 warnings, identical order |
-| Parse round-trip on the canonical corpus | 92 of 92 entries, 0 lost fields |
+| Typeset bibliography against biber, 18 documents | identical page text, six styles |
+| `biber --tool` field parity, two corpora | no field biber writes is missing |
+| Sorting, 92 entries, `nyt` / `nty` / `ynt` / `nyvt` / `ydnt` | 92 of 92 positions |
+| Fuzzing | 1.08M bibliography and 1.17M control-file cases, no crash |
+| Speed, 1,020 entries | 0.01 s and 16 MB, against biber's 9.62 s and 253 MB |
 
-The corpus is `biblatex-examples.bib` from CTAN, the file the biblatex manual is built
-from: 100 `@` blocks, 92 entries, 8 `@string`, every awkward case the package authors
-could think of. The expected order comes from a `.bbl` written by real biber 2.22 over
-that file, so the test compares against a different implementation, not against itself.
+The corpora are `biblatex-examples.bib` from CTAN (100 `@` blocks, every awkward case the
+package authors could think of), the ACM `sig-alternate` sample, and BibTeX's own
+`xampl.bib` (a preamble of raw TeX, bare abbreviations as values, `#` joins, dates hidden
+behind `\noopsort`). Expected output comes from real biber 2.22 over the same files, so
+every test compares against a different implementation, not against itself.
 
-Two files written by other people are also in the tests, because one producer's habits
-hide bugs: the ACM `sig-alternate` sample (265 blocks, 163 of them `@String`, entries in
-mixed case) and IEEEtran's `abbreviations.bib` (263 blocks, not valid UTF-8). Both keep
-every block through a sort, and no field that biber keeps is ever lost.
-
-Regenerate the fixtures with `scripts/make_oracle.sh` (needs `pdflatex` and `biber`).
+`scripts/check-pdf.sh` rebuilds one document twice — once with biber's `.bbl`, once with
+ours — and diffs the text extracted from both PDFs.
 
 ## Why the order is not obvious
 
-Six rules decide the order, and five of them are invisible until a real file breaks:
+Rules that are invisible until a real file breaks:
 
 - An entry with no author or editor sorts under its title, not at the front.
 - An `@set` sorts under its first member.
 - `options = {useprefix}` files `van Gennep` under V; without it, under G.
 - `options = {useeditor=false}` drops the editor from the sort, so the title decides.
+- A legacy `key` names where an entry files, and it is text, not markup:
+  `key = {Kn{\printfirst{v}{1987}}}` files under `Knv1987`.
+- `sort_direction="descending"` reverses a group, which is how `ydnt` puts the newest year
+  first while leaving undated entries at the end.
+- An empty field is an absent one: `organization = {}` still inherits from its `crossref`
+  parent.
 - Collation is Unicode-aware: `vázques` comes before `vizedom`, which byte order gets wrong.
-- `volume` is the last key part and an absent one counts as `0`, so a print article with
-  `volume = 12` files after its own online-only twin.
 
 Each was found by measuring a mismatch against biber, then confirming the rule in
-`biblatex.def`.
+`biblatex.def` or the `.bcf`.
 
 ## What it does not do
 
-- **No `.bcf` input.** biber runs from a `.bcf` written by biblatex. This reads `.bib`.
-- **No `uniquename` or `uniquelist`.** The `a`/`b` suffix for two works sharing an
-  author and year is implemented and matches biber; widening a name list until two
-  similar names differ is not.
-- **No remote lookups.** No DOI, ISBN or PubMed queries.
-- **LaTeX escapes are preserved, not decoded.** `{\"O}` stays `{\"O}`; `biber --tool`
-  rewrites it to `Ö`. Same meaning, different bytes, and the one place a diff against
-  biber's own rewrite shows anything on a file without other differences.
-- **`--normalise` does not delete fields.** `biber --tool` drops every field biblatex
-  does not model, and on a real ACM bibliography that is `month` on 32 entries, `numpages`
-  on 20, `acmid` on 19, `lastaccessed` on 8, plus `articleno`, `source` and `issue_date`.
-  It also folds `month` into `date` and invents `type` for report entries. This tool
-  renames the legacy aliases and leaves everything else exactly as the author wrote it.
-- **`--normalise` keeps `sorttitle`, `sortname`, `sortyear` and `presort`,** which
-  `biber --tool` deletes. Those fields decide the order, and biber's own `--tool` output
-  demonstrably reorders a bibliography when fed back through biblatex.
-- **Three schemes.** `nyt`, `nty` and `ynt` are the ones with oracle tests. `nyvt`, `ydnt`
-  and user-declared templates are not implemented, and asking for one is an error rather
-  than a silent fallback to a different order.
-
-So: not a biber replacement. A sorter that agrees with biber, which is the half that
-matters when a bibliography has to be reproducible in CI.
+- **No ISBN or PubMed lookup.** `fetch` asks Crossref about a DOI. biber also fills entries
+  from ISBNs and PubMed IDs; this does not.
+- **No contact address is built in.** Crossref likes one in the `User-Agent`; set
+  `BIBSMITH_CONTACT` or pass `--contact` and it goes out, otherwise the request is
+  anonymous.
+- **`--normalise` keeps fields that `biber --tool` deletes** — `sorttitle`, `sortname`,
+  `sortyear`, `presort`, `entryset`, plus every field biblatex does not model (`acmid`,
+  `numpages`, `lastaccessed`, `articleno`, `source`, `issue_date`, `mrnumber`). Those decide
+  the order, and biber's own `--tool` output demonstrably reorders a bibliography when fed
+  back through biblatex.
+- **One known disagreement.** On `sorting=nyvt` the five-volume Knuth set comes out of biber
+  in an order its own template contradicts (name, year, volume says B before C; biber prints
+  C, D, B). bibsmith follows the template. Nothing else in the test set differs.
 
 ## Library
 
-The binary is a thin caller over a public API, because the download counts that justify
-this tool are library downloads: `biblatex` is at 4.5M and the largest Rust CLI in the
-citation space is a TUI at 10k.
+The binary is a thin caller over a public API, because the download counts that justify this
+tool are library downloads: `biblatex` is at 4.5M and the largest Rust CLI in the citation
+space is a TUI at 10k.
 
 ```rust
 use bibsmith::{Database, Scheme, sort_entries};

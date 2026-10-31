@@ -1,4 +1,3 @@
-
 #[test]
 fn the_bcf_template_is_the_rule_not_a_name() {
     // `nyvt` sorts name, year, volume, title. It was never implemented as a scheme, and
@@ -16,12 +15,21 @@ fn the_bcf_template_is_the_rule_not_a_name() {
     assert!(keys.len() > 50, "{keys:?}");
     // Name, then year, then the volume letter: the four 1986 Knuth volumes come out A to E
     // except the one from 1984, which sorts before them all.
-    let knuth: Vec<&str> = keys.iter().copied().filter(|k| k.starts_with("knuth:ct")).collect();
+    let knuth: Vec<&str> = keys
+        .iter()
+        .copied()
+        .filter(|k| k.starts_with("knuth:ct"))
+        .collect();
     assert_eq!(
         knuth,
         vec![
-            "knuth:ct", "knuth:ct:related", "knuth:ct:a", "knuth:ct:b", "knuth:ct:c",
-            "knuth:ct:d", "knuth:ct:e"
+            "knuth:ct",
+            "knuth:ct:related",
+            "knuth:ct:a",
+            "knuth:ct:b",
+            "knuth:ct:c",
+            "knuth:ct:d",
+            "knuth:ct:e"
         ],
         "{knuth:?}"
     );

@@ -298,7 +298,10 @@ pub fn write_raw(entry: &RawNormalised) -> String {
     out.push_str(&entry.key);
     out.push(',');
     out.push('\n');
-    let has_type = entry.fields.iter().any(|(n, _, _)| n.eq_ignore_ascii_case("type"));
+    let has_type = entry
+        .fields
+        .iter()
+        .any(|(n, _, _)| n.eq_ignore_ascii_case("type"));
     if let Some(word) = implied_type.filter(|_| !has_type) {
         out.push_str(&format!("  TYPE = {{{word}}},\n"));
     }
@@ -367,9 +370,16 @@ pub fn normalise_all(src: &str) -> Result<Vec<RawNormalised>, biblatex::ParseErr
     normalise_all_with(src, true)
 }
 
-pub fn normalise_all_with(src: &str, rename: bool) -> Result<Vec<RawNormalised>, biblatex::ParseError> {
+pub fn normalise_all_with(
+    src: &str,
+    rename: bool,
+) -> Result<Vec<RawNormalised>, biblatex::ParseError> {
     let raw = RawBibliography::parse(src)?;
-    let macros = if rename { macro_table(src) } else { Default::default() };
+    let macros = if rename {
+        macro_table(src)
+    } else {
+        Default::default()
+    };
     Ok(raw
         .entries
         .iter()
@@ -484,7 +494,9 @@ pub fn repair_value_line(src: &str, line: usize) -> Option<String> {
             .chars()
             .next()
             .is_some_and(|c| c.is_ascii_alphabetic())
-        && value.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-');
+        && value
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-');
     // A third form: a date hidden behind a TeX command. `year = "{\noopsort{1973b}}1973"`
     // is BibTeX idiom for "sort on 1973b, print 1973", and the parser cannot turn it into
     // a number. What is left after the command is removed is the year to print.
@@ -670,7 +682,10 @@ fn unquote_concatenation(value: &str) -> String {
         // macro that opens with a space (`" Symposium on …"`) is joined onto the title,
         // and trimming it prints `AnnualSymposium`.
         let inner = piece.trim();
-        let inner = inner.strip_prefix('"').and_then(|i| i.strip_suffix('"')).unwrap_or(inner);
+        let inner = inner
+            .strip_prefix('"')
+            .and_then(|i| i.strip_suffix('"'))
+            .unwrap_or(inner);
         let inner = if inner.starts_with('{') && inner.ends_with('}') && inner.len() >= 2 {
             &inner[1..inner.len() - 1]
         } else {
@@ -771,18 +786,18 @@ pub fn decode_accents(text: &str) -> String {
     use unicode_normalization::UnicodeNormalization;
 
     const MARKS: &[(char, char)] = &[
-        ('"', '\u{0308}'), // diaeresis
+        ('"', '\u{0308}'),  // diaeresis
         ('\'', '\u{0301}'), // acute
-        ('`', '\u{0300}'), // grave
-        ('^', '\u{0302}'), // circumflex
-        ('~', '\u{0303}'), // tilde
-        ('=', '\u{0304}'), // macron
-        ('.', '\u{0307}'), // dot above
-        ('u', '\u{0306}'), // breve
-        ('v', '\u{030C}'), // caron
-        ('H', '\u{030B}'), // double acute
-        ('c', '\u{0327}'), // cedilla
-        ('k', '\u{0328}'), // ogonek
+        ('`', '\u{0300}'),  // grave
+        ('^', '\u{0302}'),  // circumflex
+        ('~', '\u{0303}'),  // tilde
+        ('=', '\u{0304}'),  // macron
+        ('.', '\u{0307}'),  // dot above
+        ('u', '\u{0306}'),  // breve
+        ('v', '\u{030C}'),  // caron
+        ('H', '\u{030B}'),  // double acute
+        ('c', '\u{0327}'),  // cedilla
+        ('k', '\u{0328}'),  // ogonek
     ];
     // Accents that stand alone rather than over a letter.
     const SINGLES: &[(&str, char)] = &[
@@ -827,8 +842,7 @@ pub fn decode_accents(text: &str) -> String {
                 }
             };
             let mark = command.chars().next();
-            let is_mark = command.len() == 1
-                && MARKS.iter().any(|(k, _)| Some(*k) == mark);
+            let is_mark = command.len() == 1 && MARKS.iter().any(|(k, _)| Some(*k) == mark);
             if is_mark {
                 let mut k = j;
                 if chars.get(k) == Some(&' ') {

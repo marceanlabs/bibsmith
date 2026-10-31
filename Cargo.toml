@@ -1,6 +1,6 @@
 [package]
 name = "bibsmith"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Sort and normalise .bib files the way biblatex does, without Perl or TeX"
@@ -25,7 +25,9 @@ icu_collator = { version = "2.1.2", features = ["compiled_data"] }
 icu_locale = "2.1.1"
 md5 = "0.8.1"
 quick-xml = { version = "0.41.0", default-features = false, features = ["serialize"] }
+serde_json = "1.0.154"
 unicode-normalization = "0.1.26"
+ureq = { version = "3.5.0", default-features = false, features = ["rustls"] }
 
 [profile.release]
 lto = true

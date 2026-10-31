@@ -1,12 +1,15 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use bibsmith::{
-    ControlFile, Database, disambiguate, normalise_all, scheme_or_default, sort_entries,
-    normalise_all_with, suffix_for, write_bbl_full, write_raw,
+    ControlFile, Database, disambiguate, normalise_all, normalise_all_with, scheme_or_default,
+    sort_entries, suffix_for, write_bbl_full, write_raw,
 };
 use clap::{Parser, Subcommand};
+
+mod cmd_fetch;
 
 #[derive(Parser)]
 #[command(
@@ -43,6 +46,16 @@ enum Command {
         /// Write to this file instead of alongside the .bcf
         #[arg(short, long)]
         out: Option<PathBuf>,
+    },
+    /// Fill in missing fields from the DOIs the entries name
+    Fetch {
+        file: PathBuf,
+        /// Replace the file instead of printing the additions
+        #[arg(long)]
+        write: bool,
+        /// Contact address for the Crossref request; BIBSMITH_CONTACT is used if unset
+        #[arg(long)]
+        contact: Option<String>,
     },
     /// Print the label suffix biblatex would print for each entry that needs one
     Labels {
@@ -149,8 +162,8 @@ fn run(cli: Cli) -> Result<(), String> {
                 src.push('\n');
             }
 
-            let db = bibsmith::parse_lenient(&src)
-                .map_err(|e| format!("{}: {e}", bcf.display()))?;
+            let db =
+                bibsmith::parse_lenient(&src).map_err(|e| format!("{}: {e}", bcf.display()))?;
 
             // `\nocite{*}` reaches the control file as a literal `*`, and means every
             // entry in the database rather than a key called star.
@@ -190,9 +203,10 @@ fn run(cli: Cli) -> Result<(), String> {
             // user declared, then sorts correctly without a line of new code. A template
             // that sorts by a computed field (`labelalpha`) is left to the two-phase path
             // below, which needs the labels before it can sort on them.
-            let sorts_by_label = ctl.sorts.iter().flat_map(|g| g.items.iter()).any(
-                |item| matches!(item, bibsmith::bcf::SortItem::Field(f) if f == "labelalpha"),
-            );
+            let sorts_by_label =
+                ctl.sorts.iter().flat_map(|g| g.items.iter()).any(
+                    |item| matches!(item, bibsmith::bcf::SortItem::Field(f) if f == "labelalpha"),
+                );
             let template = ctl.templates.get(&ctl.sorting_template);
             let ordered = match (template, sorts_by_label) {
                 (Some(groups), false) => bibsmith::sort::sort_entries_by_template(
@@ -252,8 +266,7 @@ fn run(cli: Cli) -> Result<(), String> {
                     let hash = format!("{:x}", md5::compute(key.as_bytes()));
                     if seen_data.insert(key.clone()) {
                         if let Some(related) = db.get(&key) {
-                            let mut data =
-                                bibsmith::merge::effective(&db, related, &raw);
+                            let mut data = bibsmith::merge::effective(&db, related, &raw);
                             data.data_key = Some(hash.clone());
                             data_entries.push(data);
                         }
@@ -267,7 +280,8 @@ fn run(cli: Cli) -> Result<(), String> {
             // actually cites are the ones listed beside it. An entry only a wildcard put
             // there is marked, which is what biber writes `\true{nocite}` for.
             let wildcard = ctl.citekeys.iter().any(|k| k == "*");
-            let explicit: std::collections::HashSet<&str> = ctl.citekeys
+            let explicit: std::collections::HashSet<&str> = ctl
+                .citekeys
                 .iter()
                 .filter(|k| *k != "*")
                 .map(|k| k.as_str())
@@ -379,7 +393,9 @@ fn run(cli: Cli) -> Result<(), String> {
                                 .collect::<Vec<_>>(),
                         )
                     })
-                    .filter(|(_, list): &(String, Vec<&bibsmith::merge::Effective>)| !list.is_empty())
+                    .filter(|(_, list): &(String, Vec<&bibsmith::merge::Effective>)| {
+                        !list.is_empty()
+                    })
                     .collect()
             };
             // The `related` entries go last, out of the sorted flow: they exist only to
@@ -414,6 +430,14 @@ fn run(cli: Cli) -> Result<(), String> {
             let dest = out.unwrap_or_else(|| bcf.with_extension("bbl"));
             std::fs::write(&dest, text).map_err(|e| format!("{}: {e}", dest.display()))?;
             eprintln!("bibsmith: wrote {}", dest.display());
+            Ok(())
+        }
+        Command::Fetch {
+            file,
+            write,
+            contact,
+        } => {
+            cmd_fetch::run(&file, write, contact)?;
             Ok(())
         }
         Command::Labels { file, scheme } => {
@@ -465,9 +489,13 @@ fn run(cli: Cli) -> Result<(), String> {
 
 /// `@string{dtv = ...}` is written `@STRING{DTV = ...}`, as biber writes it.
 fn upper_string_block(block: &str) -> String {
-    let Some(open) = block.find('{') else { return block.to_string() };
+    let Some(open) = block.find('{') else {
+        return block.to_string();
+    };
     let rest = &block[open + 1..];
-    let Some(eq) = rest.find('=') else { return block.to_string() };
+    let Some(eq) = rest.find('=') else {
+        return block.to_string();
+    };
     let name = rest[..eq].trim();
     format!(
         "@STRING{{{} = {}",

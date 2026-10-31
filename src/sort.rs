@@ -399,9 +399,21 @@ fn template_value(
     // A name field is a list, and biblatex compares it person by person.
     if matches!(
         name,
-        "author" | "editor" | "translator" | "bookauthor" | "editora" | "editorb" | "editorc"
-            | "afterword" | "annotator" | "commentator" | "foreword" | "introduction"
-            | "shortauthor" | "shorteditor" | "holder"
+        "author"
+            | "editor"
+            | "translator"
+            | "bookauthor"
+            | "editora"
+            | "editorb"
+            | "editorc"
+            | "afterword"
+            | "annotator"
+            | "commentator"
+            | "foreword"
+            | "introduction"
+            | "shortauthor"
+            | "shorteditor"
+            | "holder"
     ) {
         let opts = NameOptions::from_entry(entry);
         // `options = {useeditor=false}` is a statement about the label: Britannica must file
@@ -423,7 +435,10 @@ fn template_value(
             .iter()
             .map(|p| {
                 if opts.use_prefix && !p.prefix.is_empty() {
-                    format!("{} {}{SEP}{}{SEP}{}", p.prefix, p.name, p.given_name, p.prefix)
+                    format!(
+                        "{} {}{SEP}{}{SEP}{}",
+                        p.prefix, p.name, p.given_name, p.prefix
+                    )
                 } else {
                     person_key(p)
                 }
@@ -440,7 +455,10 @@ fn template_value(
     }
     // A date field is compared by its year, and a missing year is an empty slot rather than
     // the string "0": `volume` is the one field that wants a number.
-    if matches!(name, "year" | "date" | "sortyear" | "origdate" | "eventdate" | "urldate") {
+    if matches!(
+        name,
+        "year" | "date" | "sortyear" | "origdate" | "eventdate" | "urldate"
+    ) {
         // `year` is the old spelling of `date`: biber rewrites one to the other on the way
         // out, so a template that asks for `year` must find a `date` entry.
         let raw = match name {
@@ -454,7 +472,11 @@ fn template_value(
         } else {
             raw.trim().to_string()
         };
-        return if value.is_empty() { None } else { Some(vec![value]) };
+        return if value.is_empty() {
+            None
+        } else {
+            Some(vec![value])
+        };
     }
     if let Some(v) = extra.get(name) {
         return Some(vec![v.clone()]);

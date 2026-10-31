@@ -198,7 +198,13 @@ fn sorting_does_not_escape_the_authors_tex() {
         .output()
         .expect("run");
     let text = String::from_utf8_lossy(&out.stdout);
-    assert!(text.contains("\\emph{y}"), "the command must be written as the author wrote it: {text}");
-    assert!(text.contains("100% sure"), "a percent sign is not an escape: {text}");
+    assert!(
+        text.contains("\\emph{y}"),
+        "the command must be written as the author wrote it: {text}"
+    );
+    assert!(
+        text.contains("100% sure"),
+        "a percent sign is not an escape: {text}"
+    );
     assert!(!text.contains("\\{y\\}"));
 }

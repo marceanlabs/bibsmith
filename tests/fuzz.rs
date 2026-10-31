@@ -109,7 +109,13 @@ fn structured_bib() -> impl Strategy<Value = String> {
         value,
     );
     (
-        prop_oneof![Just("article"), Just("book"), Just("set"), Just("misc"), Just("thesis")],
+        prop_oneof![
+            Just("article"),
+            Just("book"),
+            Just("set"),
+            Just("misc"),
+            Just("thesis")
+        ],
         "[a-z0-9:]{1,8}",
         proptest::collection::vec(field, 0..8),
     )

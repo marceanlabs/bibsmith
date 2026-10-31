@@ -284,7 +284,10 @@ fn a_key_cited_twice_is_written_once() {
     );
     let ctl = ControlFile::parse(&doubled).expect("bcf parses");
     let count = ctl.citekeys.iter().filter(|k| *k == "knuth:ct").count();
-    assert_eq!(count, 1, "a repeated citation must not become a repeated entry");
+    assert_eq!(
+        count, 1,
+        "a repeated citation must not become a repeated entry"
+    );
 }
 
 #[test]
@@ -293,11 +296,12 @@ fn xdata_fields_are_merged_and_win() {
     // `location = {Oxford}` prints Oxford, so the inherited value wins.
     let src = std::fs::read_to_string(oracle("xdata/x.bib")).expect("fixture");
     let db = biblatex::Bibliography::parse(&src).expect("parse");
-    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
-        .expect("raw")
-        .into_iter()
-        .map(|e| (e.key, e.fields))
-        .collect();
+    let raw: HashMap<String, Vec<(String, String)>> =
+        bibsmith::normalize::raw_expanded_entries(&src)
+            .expect("raw")
+            .into_iter()
+            .map(|e| (e.key, e.fields))
+            .collect();
     let eff = bibsmith::merge::effective(&db, db.get("second").expect("entry"), &raw);
     let value = |name: &str| {
         eff.values
@@ -307,35 +311,54 @@ fn xdata_fields_are_merged_and_win() {
             .unwrap_or_default()
     };
     assert_eq!(value("publisher"), "Shared Press");
-    assert_eq!(value("location"), "Oxford", "the xdata value wins over the entry's own");
+    assert_eq!(
+        value("location"),
+        "Oxford",
+        "the xdata value wins over the entry's own"
+    );
 }
 
 #[test]
 fn a_bibtex_only_type_becomes_the_biblatex_type_and_a_type_field() {
-    let mut src = String::from("@mastersthesis{m, author = {A, B}, title = {T}, school = {S}, year = {1999}}\n");
+    let mut src = String::from(
+        "@mastersthesis{m, author = {A, B}, title = {T}, school = {S}, year = {1999}}\n",
+    );
     src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
     let db = biblatex::Bibliography::parse(&src).unwrap();
-    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.key, e.fields))
-        .collect();
-    let eff = bibsmith::merge::effective(&db, db.get("m").unwrap(), &raw);
-    assert_eq!(eff.kind, "thesis", "biblatex has no mastersthesis type");
-    assert!(eff.values.iter().any(|(k, v)| k == "type" && v == "mathesis"));
-}
-
-#[test]
-fn a_month_name_is_written_as_a_number_and_a_range_starts_where_it_starts() {
-    for (input, want) in [("January", "1"), ("Oct.", "10"), ("Jan.-March", "1"), ("10~1", "10~1")] {
-        let mut src = format!("@misc{{m, author = {{A, B}}, title = {{T}}, year = {{2001}}, month = {{{input}}}}}\n");
-        src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
-        let db = biblatex::Bibliography::parse(&src).unwrap();
-        let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+    let raw: HashMap<String, Vec<(String, String)>> =
+        bibsmith::normalize::raw_expanded_entries(&src)
             .unwrap()
             .into_iter()
             .map(|e| (e.key, e.fields))
             .collect();
+    let eff = bibsmith::merge::effective(&db, db.get("m").unwrap(), &raw);
+    assert_eq!(eff.kind, "thesis", "biblatex has no mastersthesis type");
+    assert!(
+        eff.values
+            .iter()
+            .any(|(k, v)| k == "type" && v == "mathesis")
+    );
+}
+
+#[test]
+fn a_month_name_is_written_as_a_number_and_a_range_starts_where_it_starts() {
+    for (input, want) in [
+        ("January", "1"),
+        ("Oct.", "10"),
+        ("Jan.-March", "1"),
+        ("10~1", "10~1"),
+    ] {
+        let mut src = format!(
+            "@misc{{m, author = {{A, B}}, title = {{T}}, year = {{2001}}, month = {{{input}}}}}\n"
+        );
+        src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
+        let db = biblatex::Bibliography::parse(&src).unwrap();
+        let raw: HashMap<String, Vec<(String, String)>> =
+            bibsmith::normalize::raw_expanded_entries(&src)
+                .unwrap()
+                .into_iter()
+                .map(|e| (e.key, e.fields))
+                .collect();
         let eff = bibsmith::merge::effective(&db, db.get("m").unwrap(), &raw);
         let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
         let ctl = ControlFile::parse(&xml).unwrap();
@@ -349,34 +372,45 @@ fn a_month_name_is_written_as_a_number_and_a_range_starts_where_it_starts() {
 
 #[test]
 fn an_explicit_location_beats_the_old_address_field() {
-    let mut src = String::from("@book{b, author = {A, B}, title = {T}, year = {1990}, location = {Florence}, address = {New York}}\n");
+    let mut src = String::from(
+        "@book{b, author = {A, B}, title = {T}, year = {1990}, location = {Florence}, address = {New York}}\n",
+    );
     src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
     let db = biblatex::Bibliography::parse(&src).unwrap();
-    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.key, e.fields))
-        .collect();
+    let raw: HashMap<String, Vec<(String, String)>> =
+        bibsmith::normalize::raw_expanded_entries(&src)
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.key, e.fields))
+            .collect();
     let eff = bibsmith::merge::effective(&db, db.get("b").unwrap(), &raw);
     let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
     let ctl = ControlFile::parse(&xml).unwrap();
     let bbl = write_bbl(&ctl, &[&eff], &HashMap::new(), &HashMap::new());
     assert!(bbl.contains("{Florence}"), "the new name wins");
-    assert!(!bbl.contains("{New York}"), "the old name must not be written as well");
+    assert!(
+        !bbl.contains("{New York}"),
+        "the old name must not be written as well"
+    );
 }
 
 #[test]
 fn an_empty_author_means_no_author() {
-    let mut src = String::from("@proceedings{emptyauthor, author = {}, title = {CHI}, year = {2008}}\n");
+    let mut src =
+        String::from("@proceedings{emptyauthor, author = {}, title = {CHI}, year = {2008}}\n");
     src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
     let db = biblatex::Bibliography::parse(&src).unwrap();
-    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.key, e.fields))
-        .collect();
+    let raw: HashMap<String, Vec<(String, String)>> =
+        bibsmith::normalize::raw_expanded_entries(&src)
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.key, e.fields))
+            .collect();
     let eff = bibsmith::merge::effective(&db, db.get("emptyauthor").unwrap(), &raw);
-    assert!(eff.names.is_empty(), "a phantom person sorts the entry to the front");
+    assert!(
+        eff.names.is_empty(),
+        "a phantom person sorts the entry to the front"
+    );
 }
 
 fn one_bbl(entry: &str, key: &str) -> String {
@@ -384,11 +418,12 @@ fn one_bbl(entry: &str, key: &str) -> String {
     src.push('\n');
     src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
     let db = biblatex::Bibliography::parse(&src).unwrap();
-    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.key, e.fields))
-        .collect();
+    let raw: HashMap<String, Vec<(String, String)>> =
+        bibsmith::normalize::raw_expanded_entries(&src)
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.key, e.fields))
+            .collect();
     let eff = bibsmith::merge::effective(&db, db.get(key).unwrap(), &raw);
     let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
     let ctl = ControlFile::parse(&xml).unwrap();
@@ -403,8 +438,14 @@ fn a_zotero_datetime_is_not_a_date() {
         "@book{zd, author = {Jones, Alice}, title = {T}, date = {2019-06-01 00:00:00}}",
         "zd",
     );
-    assert!(!bbl.contains("\\field{year}"), "an unreadable date has no year");
-    assert!(bbl.contains("\\field{labeldatesource}{nodate}"), "this is what prints n.d.");
+    assert!(
+        !bbl.contains("\\field{year}"),
+        "an unreadable date has no year"
+    );
+    assert!(
+        bbl.contains("\\field{labeldatesource}{nodate}"),
+        "this is what prints n.d."
+    );
     assert!(!bbl.contains("dateera"));
 }
 
@@ -414,7 +455,10 @@ fn a_url_is_written_raw_because_it_sits_in_verbatim() {
         "@online{zu, author = {A, B}, title = {T}, year = {2001}, url = {https://e.org/a?x=1&y=2}}",
         "zu",
     );
-    assert!(bbl.contains("x=1&y=2"), "inside \\verb an escaped & prints a backslash");
+    assert!(
+        bbl.contains("x=1&y=2"),
+        "inside \\verb an escaped & prints a backslash"
+    );
     assert!(!bbl.contains("x=1\\&y=2"));
 }
 
@@ -428,11 +472,12 @@ fn a_name_list_is_extended_only_until_it_tells_two_entries_apart() {
          @article{u3, author = {Zeta, Zed and One, A. and Two, B. and Three, C.}, title = {Three}, journal = {J}, year = {2002}}\n",
     );
     let db = biblatex::Bibliography::parse(&src).unwrap();
-    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.key, e.fields))
-        .collect();
+    let raw: HashMap<String, Vec<(String, String)>> =
+        bibsmith::normalize::raw_expanded_entries(&src)
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.key, e.fields))
+            .collect();
     let entries: Vec<_> = ["u1", "u2", "u3"]
         .iter()
         .map(|k| bibsmith::merge::effective(&db, db.get(k).unwrap(), &raw))
@@ -441,7 +486,10 @@ fn a_name_list_is_extended_only_until_it_tells_two_entries_apart() {
     let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
     let ctl = ControlFile::parse(&xml).unwrap();
     let bbl = write_bbl(&ctl, &refs, &HashMap::new(), &HashMap::new());
-    assert!(bbl.contains("{ul=2}"), "the two Akyildiz entries need a second name");
+    assert!(
+        bbl.contains("{ul=2}"),
+        "the two Akyildiz entries need a second name"
+    );
     assert!(!bbl.contains("{ul=3}"), "two names already separate them");
     let zeta = &bbl[bbl.find("\\entry{u3}").unwrap()..];
     assert!(
@@ -459,11 +507,12 @@ fn an_identical_name_list_is_not_extended() {
          @article{d2, author = {Solo, A. and Second, B. and Third, C. and Fourth, D.}, title = {T}, journal = {J}, year = {2001}}\n",
     );
     let db = biblatex::Bibliography::parse(&src).unwrap();
-    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.key, e.fields))
-        .collect();
+    let raw: HashMap<String, Vec<(String, String)>> =
+        bibsmith::normalize::raw_expanded_entries(&src)
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.key, e.fields))
+            .collect();
     let entries: Vec<_> = ["d1", "d2"]
         .iter()
         .map(|k| bibsmith::merge::effective(&db, db.get(k).unwrap(), &raw))
@@ -500,7 +549,11 @@ fn a_document_with_two_sections_gets_two_refsections() {
   <bcf:datalist section="2" name="nyt/global//global/global/global"/>
 </bcf:controlfile>"#;
     let ctl = ControlFile::parse(xml).expect("parse");
-    assert_eq!(ctl.datasources.len(), 1, "the same file listed twice is one file");
+    assert_eq!(
+        ctl.datasources.len(),
+        1,
+        "the same file listed twice is one file"
+    );
     let numbers: Vec<&str> = ctl.sections.iter().map(|(n, _)| n.as_str()).collect();
     assert_eq!(numbers, ["1", "2"], "one section per \\refsection");
     assert_eq!(ctl.sections[0].1, ["alpha", "beta"]);
@@ -518,15 +571,19 @@ fn a_book_author_is_inherited_through_a_crossref_chain() {
          @inbook{child, author = {Junior, Jim}, title = {Child Piece}, crossref = {middle}, pages = {11--20}}\n",
     );
     let db = biblatex::Bibliography::parse(&src).unwrap();
-    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.key, e.fields))
-        .collect();
+    let raw: HashMap<String, Vec<(String, String)>> =
+        bibsmith::normalize::raw_expanded_entries(&src)
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.key, e.fields))
+            .collect();
     for key in ["middle", "child"] {
         let eff = bibsmith::merge::effective(&db, db.get(key).unwrap(), &raw);
         let book = eff.names.iter().find(|(f, _)| f == "bookauthor");
-        assert!(book.is_some(), "{key} needs a bookauthor or the book's editor vanishes");
+        assert!(
+            book.is_some(),
+            "{key} needs a bookauthor or the book's editor vanishes"
+        );
         assert_eq!(book.unwrap().1[0].name, "Editor");
     }
 }
@@ -536,8 +593,14 @@ fn a_date_range_numbers_by_its_years_not_its_months() {
     // `2001/2003` and `2001-05/2003-06` are both 2001–2003, so they are one label and take
     // a/b; a plain 2001 is a different label and takes nothing.
     let entries = [
-        ("@misc{r1, author = {Span, Sam}, title = {One}, date = {2001/2003}}", "r1"),
-        ("@misc{r2, author = {Span, Sam}, title = {Two}, date = {2001-05/2003-06}}", "r2"),
+        (
+            "@misc{r1, author = {Span, Sam}, title = {One}, date = {2001/2003}}",
+            "r1",
+        ),
+        (
+            "@misc{r2, author = {Span, Sam}, title = {Two}, date = {2001-05/2003-06}}",
+            "r2",
+        ),
     ];
     let mut src = String::new();
     for (e, _) in entries {
@@ -546,10 +609,7 @@ fn a_date_range_numbers_by_its_years_not_its_months() {
     }
     src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
     let db = biblatex::Bibliography::parse(&src).unwrap();
-    let ents: Vec<_> = entries
-        .iter()
-        .map(|(_, k)| db.get(k).unwrap())
-        .collect();
+    let ents: Vec<_> = entries.iter().map(|(_, k)| db.get(k).unwrap()).collect();
     let ordered = bibsmith::sort::sort_entries(&ents, bibsmith::Scheme::Nyt);
     let extras = bibsmith::disambiguate::disambiguate(&ordered, bibsmith::Scheme::Nyt);
     assert_eq!(extras.get("r1"), Some(&1), "the first range takes a");
@@ -565,11 +625,12 @@ fn a_related_entry_is_written_under_its_hash_and_left_out_of_the_list() {
          @misc{other, author = {Oscar, O.}, title = {Related Entry}, year = {2001}}\n",
     );
     let db = biblatex::Bibliography::parse(&src).unwrap();
-    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
-        .unwrap()
-        .into_iter()
-        .map(|e| (e.key, e.fields))
-        .collect();
+    let raw: HashMap<String, Vec<(String, String)>> =
+        bibsmith::normalize::raw_expanded_entries(&src)
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.key, e.fields))
+            .collect();
     let mut main = bibsmith::merge::effective(&db, db.get("main").unwrap(), &raw);
     let hash = format!("{:x}", md5::compute(b"other"));
     main.values
@@ -583,8 +644,14 @@ fn a_related_entry_is_written_under_its_hash_and_left_out_of_the_list() {
     let xml = std::fs::read_to_string(oracle("doc/doc.bcf")).unwrap();
     let ctl = ControlFile::parse(&xml).unwrap();
     let bbl = write_bbl(&ctl, &[&main, &data], &HashMap::new(), &HashMap::new());
-    assert!(bbl.contains(&format!("\\entry{{{hash}}}{{misc}}{{skipbib=true")), "written under its hash, out of the list");
-    assert!(bbl.contains(&format!("\\field{{related}}{{{hash}}}")), "the parent points at that hash");
+    assert!(
+        bbl.contains(&format!("\\entry{{{hash}}}{{misc}}{{skipbib=true")),
+        "written under its hash, out of the list"
+    );
+    assert!(
+        bbl.contains(&format!("\\field{{related}}{{{hash}}}")),
+        "the parent points at that hash"
+    );
 }
 
 #[test]
@@ -610,7 +677,11 @@ fn entries_that_share_a_name_are_numbered_in_bibliography_order() {
                     .nth(1)
                     .map(|s| s.split('}').next().unwrap().to_string())
             });
-        assert_eq!(number.as_deref(), Some((i + 1).to_string().as_str()), "{key}");
+        assert_eq!(
+            number.as_deref(),
+            Some((i + 1).to_string().as_str()),
+            "{key}"
+        );
     }
 }
 
@@ -659,15 +730,23 @@ fn a_control_character_never_reaches_the_typesetting_file() {
 #[test]
 fn a_keyword_list_is_written_as_keywords_not_as_a_field() {
     // `\field{keywords}{primary}` prints nothing: biblatex reads keywords through `\keyw`.
-    let src = "@misc{k, author = {A, B}, title = {T}, year = {2000}, keywords = {primary, secondary}}\n";
+    let src =
+        "@misc{k, author = {A, B}, title = {T}, year = {2000}, keywords = {primary, secondary}}\n";
     let db = bibsmith::parse_lenient(src).expect("parse");
     let raw = bibsmith::normalize::raw_expanded_entries(src).expect("raw");
     let raw: HashMap<String, Vec<(String, String)>> =
         raw.into_iter().map(|e| (e.key, e.fields)).collect();
-    let effective: Vec<bibsmith::merge::Effective> =
-        db.iter().map(|entry| bibsmith::merge::effective(&db, entry, &raw)).collect();
+    let effective: Vec<bibsmith::merge::Effective> = db
+        .iter()
+        .map(|entry| bibsmith::merge::effective(&db, entry, &raw))
+        .collect();
     let refs: Vec<&bibsmith::merge::Effective> = effective.iter().collect();
-    let bbl = write_bbl(&ControlFile::default(), &refs, &HashMap::new(), &HashMap::new());
+    let bbl = write_bbl(
+        &ControlFile::default(),
+        &refs,
+        &HashMap::new(),
+        &HashMap::new(),
+    );
     assert!(bbl.contains("\\keyw{primary,secondary}"), "{bbl:.600}");
     assert!(!bbl.contains("\\field{keywords}"));
 }
@@ -681,11 +760,21 @@ fn a_page_range_says_how_many_pages_it_covers() {
     let raw = bibsmith::normalize::raw_expanded_entries(src).expect("raw");
     let raw: HashMap<String, Vec<(String, String)>> =
         raw.into_iter().map(|e| (e.key, e.fields)).collect();
-    let effective: Vec<bibsmith::merge::Effective> =
-        db.iter().map(|entry| bibsmith::merge::effective(&db, entry, &raw)).collect();
+    let effective: Vec<bibsmith::merge::Effective> = db
+        .iter()
+        .map(|entry| bibsmith::merge::effective(&db, entry, &raw))
+        .collect();
     let refs: Vec<&bibsmith::merge::Effective> = effective.iter().collect();
-    let bbl = write_bbl(&ControlFile::default(), &refs, &HashMap::new(), &HashMap::new());
-    assert!(bbl.contains("\\bibrangessep "), "two ranges need a separator: {bbl:.600}");
+    let bbl = write_bbl(
+        &ControlFile::default(),
+        &refs,
+        &HashMap::new(),
+        &HashMap::new(),
+    );
+    assert!(
+        bbl.contains("\\bibrangessep "),
+        "two ranges need a separator: {bbl:.600}"
+    );
     assert!(bbl.contains("\\range{pages}{59}"), "{bbl:.600}");
 }
 
@@ -701,8 +790,10 @@ fn two_entries_that_share_a_title_are_not_each_the_only_one() {
     let raw = bibsmith::normalize::raw_expanded_entries(src).expect("raw");
     let raw: HashMap<String, Vec<(String, String)>> =
         raw.into_iter().map(|e| (e.key, e.fields)).collect();
-    let effective: Vec<bibsmith::merge::Effective> =
-        db.iter().map(|entry| bibsmith::merge::effective(&db, entry, &raw)).collect();
+    let effective: Vec<bibsmith::merge::Effective> = db
+        .iter()
+        .map(|entry| bibsmith::merge::effective(&db, entry, &raw))
+        .collect();
     let refs: Vec<&bibsmith::merge::Effective> = effective.iter().collect();
 
     let mut ctl = ControlFile::default();
@@ -727,8 +818,10 @@ fn an_empty_field_is_an_absent_one_when_crossref_fills_it_in() {
     let raw = bibsmith::normalize::raw_expanded_entries(src).expect("raw");
     let raw: HashMap<String, Vec<(String, String)>> =
         raw.into_iter().map(|e| (e.key, e.fields)).collect();
-    let effective: Vec<bibsmith::merge::Effective> =
-        db.iter().map(|entry| bibsmith::merge::effective(&db, entry, &raw)).collect();
+    let effective: Vec<bibsmith::merge::Effective> = db
+        .iter()
+        .map(|entry| bibsmith::merge::effective(&db, entry, &raw))
+        .collect();
     let child = effective.iter().find(|e| e.key == "child").expect("child");
     let org = child
         .values
@@ -736,5 +829,8 @@ fn an_empty_field_is_an_absent_one_when_crossref_fills_it_in() {
         .find(|(k, _)| k == "organization")
         .map(|(_, v)| v.as_str())
         .unwrap_or("");
-    assert_eq!(org, "The OX Association", "the parent's value should arrive");
+    assert_eq!(
+        org, "The OX Association",
+        "the parent's value should arrive"
+    );
 }

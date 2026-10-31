@@ -184,10 +184,12 @@ fn sortinits(entries: &[&Effective]) -> std::collections::HashMap<String, String
             // The particle is only part of the label when the entry asks for it:
             // `options = {useprefix}` files `van Gennep` under `v`, while the default
             // drops it and files `von Brandt` under `B`.
-            .map(|p| match p.prefix.is_empty() || !option_on(&options, "useprefix") {
-                true => p.name.clone(),
-                false => format!("{} {}", p.prefix, p.name),
-            })
+            .map(
+                |p| match p.prefix.is_empty() || !option_on(&options, "useprefix") {
+                    true => p.name.clone(),
+                    false => format!("{} {}", p.prefix, p.name),
+                },
+            )
             .or_else(|| {
                 entry
                     .values
@@ -216,8 +218,12 @@ fn sortinits(entries: &[&Effective]) -> std::collections::HashMap<String, String
         if out.get(&entry.key).is_some_and(|s| !s.is_empty()) {
             continue;
         }
-        let Some(members) = &entry.entryset else { continue };
-        let Some(first) = members.split(',').next() else { continue };
+        let Some(members) = &entry.entryset else {
+            continue;
+        };
+        let Some(first) = members.split(',').next() else {
+            continue;
+        };
         if let Some(initial) = out.get(first.trim()).cloned() {
             out.insert(entry.key.clone(), initial);
         }
@@ -263,13 +269,13 @@ fn name_ranks(entries: &[&Effective]) -> std::collections::HashMap<String, usize
 /// 0 when the family name is enough, 1 when initials separate the names, 2 when the whole
 /// given name is needed. Measured on a file with Smith/John, Smith/Jane and Smith/John A.:
 /// biber gives the first two 2 and the third 1, because `J.` collides but `J. A.` does not.
-fn uniqueness(
-    entries: &[&Effective],
-) -> std::collections::HashMap<(String, String, String), u8> {
+fn uniqueness(entries: &[&Effective]) -> std::collections::HashMap<(String, String, String), u8> {
     // Scoped to a year: `Other, Olivia` 1990 and `Other, Oscar` 2001 both print as "Other",
     // because the label already tells them apart. Two Smiths in the same year do not.
-    let mut families: std::collections::HashMap<(String, String), std::collections::HashSet<String>> =
-        Default::default();
+    let mut families: std::collections::HashMap<
+        (String, String),
+        std::collections::HashSet<String>,
+    > = Default::default();
     for entry in entries {
         let year = entry_year(entry);
         for (_, people) in &entry.names {
@@ -292,11 +298,7 @@ fn uniqueness(
                     .iter()
                     .filter(|other| initials(other, "") == mine)
                     .count();
-                if shared == 1 {
-                    1
-                } else {
-                    2
-                }
+                if shared == 1 { 1 } else { 2 }
             };
             levels.insert((family.clone(), given.clone(), year.clone()), level);
         }
@@ -348,7 +350,13 @@ fn uniquelist(entries: &[&Effective], maxnames: usize) -> std::collections::Hash
     fn keys(people: &[biblatex::Person]) -> Vec<String> {
         people
             .iter()
-            .map(|p| format!("{}\u{1}{}", p.name.to_lowercase(), p.given_name.to_lowercase()))
+            .map(|p| {
+                format!(
+                    "{}\u{1}{}",
+                    p.name.to_lowercase(),
+                    p.given_name.to_lowercase()
+                )
+            })
             .collect()
     }
 
@@ -369,7 +377,9 @@ fn uniquelist(entries: &[&Effective], maxnames: usize) -> std::collections::Hash
             continue;
         }
         for entry in &members {
-            let Some((field, people)) = entry.names.first() else { continue };
+            let Some((field, people)) = entry.names.first() else {
+                continue;
+            };
             let mine = keys(people);
             // A list no longer than `maxnames` is printed in full anyway, so extending it
             // would change nothing.
@@ -379,7 +389,12 @@ fn uniquelist(entries: &[&Effective], maxnames: usize) -> std::collections::Hash
             let others: Vec<Vec<String>> = members
                 .iter()
                 .filter(|o| o.key != entry.key)
-                .filter_map(|o| o.names.iter().find(|(f, _)| f == field).map(|(_, p)| keys(p)))
+                .filter_map(|o| {
+                    o.names
+                        .iter()
+                        .find(|(f, _)| f == field)
+                        .map(|(_, p)| keys(p))
+                })
                 .collect();
 
             // Duplicates of my own list are not a clash: they are the same people, and
@@ -457,9 +472,15 @@ fn name_block(
             name_hash(std::slice::from_ref(p))
         ));
         if !p.prefix.is_empty() {
-            out.push_str(&format!("           prefix={{{}}},\n", balanced(typeset(&p.prefix))));
+            out.push_str(&format!(
+                "           prefix={{{}}},\n",
+                balanced(typeset(&p.prefix))
+            ));
         }
-        out.push_str(&format!("           family={{{}}},\n", balanced(typeset(&p.name))));
+        out.push_str(&format!(
+            "           family={{{}}},\n",
+            balanced(typeset(&p.name))
+        ));
         out.push_str(&format!(
             "           familyi={{{}}},\n",
             balanced(typeset(&initials(&p.name, "\\bibinitperiod")))
@@ -470,14 +491,20 @@ fn name_block(
             // after a word the wider `\bibnamedelima`. One space for both reflows the
             // page: "G. E. L. Owen" breaks in the wrong place.
             let given = join_given_parts(&p.given_name);
-            out.push_str(&format!("           given={{{}}},\n", balanced(typeset(&given))));
+            out.push_str(&format!(
+                "           given={{{}}},\n",
+                balanced(typeset(&given))
+            ));
             out.push_str(&format!(
                 "           giveni={{{}}},\n",
                 balanced(typeset(&initials(&p.given_name, "\\bibinitperiod")))
             ));
         }
         if !p.suffix.is_empty() {
-            out.push_str(&format!("           suffix={{{}}},\n", balanced(typeset(&p.suffix))));
+            out.push_str(&format!(
+                "           suffix={{{}}},\n",
+                balanced(typeset(&p.suffix))
+            ));
         }
         // No blank line here: `\name` scans its argument, and a blank line is a `\par`,
         // which ends the scan and spills the rest of the attributes onto the page.
@@ -546,10 +573,7 @@ fn page_span(value: &str) -> Option<u32> {
         if part.is_empty() {
             continue;
         }
-        let numbers: Vec<&str> = part
-            .split("\\bibrangedash")
-            .map(|n| n.trim())
-            .collect();
+        let numbers: Vec<&str> = part.split("\\bibrangedash").map(|n| n.trim()).collect();
         let parse = |s: &str| -> Option<u32> {
             let digits: String = s.chars().take_while(|c| c.is_ascii_digit()).collect();
             digits.parse().ok()
@@ -982,7 +1006,11 @@ pub fn write_bbl_full(
             if is_member.contains(&entry.key.as_str()) {
                 continue; // written above
             }
-            let inset = if entry.entryset.is_some() { Some("") } else { None };
+            let inset = if entry.entryset.is_some() {
+                Some("")
+            } else {
+                None
+            };
             write_entry(
                 &mut out,
                 ctl,
@@ -1025,10 +1053,7 @@ fn write_entry(
 ) {
     // A `related` entry is stored under its hash, and stays out of the list.
     let (entry_key, options) = match &entry.data_key {
-        Some(hash) => (
-            hash.as_str(),
-            "skipbib=true,skipbiblist=true,skiplab=true",
-        ),
+        Some(hash) => (hash.as_str(), "skipbib=true,skipbiblist=true,skiplab=true"),
         None => (entry.key.as_str(), options),
     };
     out.push_str(&format!(
@@ -1052,7 +1077,11 @@ fn write_entry(
     let year = entry_year(entry);
     let mut label_source = String::new();
     for (field_name, people) in &entry.names {
-        let ul = if label_source.is_empty() { lists.get(&entry.key).copied() } else { None };
+        let ul = if label_source.is_empty() {
+            lists.get(&entry.key).copied()
+        } else {
+            None
+        };
         out.push_str(&name_block(field_name, people, &year, levels, ul));
         if label_source.is_empty()
             && matches!(field_name.as_str(), "author" | "editor" | "translator")
@@ -1079,7 +1108,10 @@ fn write_entry(
         }
     }
 
-    let sortinit = ranks_init.get(entry.key.as_str()).cloned().unwrap_or_default();
+    let sortinit = ranks_init
+        .get(entry.key.as_str())
+        .cloned()
+        .unwrap_or_default();
     // A `related` copy says which entry it is a copy of; biblatex uses that to print the
     // copy's own citation without treating it as a separate work.
     if entry.data_key.is_some() {
@@ -1234,11 +1266,7 @@ fn write_entry(
     let labelled_date = ctl.option("labeldateparts") != Some("0");
     let alphabetic = ctl.option("labelalpha") != Some("0");
     if labelled_date {
-        field(
-            out,
-            "labeldatesource",
-            if has_date { "" } else { "nodate" },
-        );
+        field(out, "labeldatesource", if has_date { "" } else { "nodate" });
     }
     // `dateera` belongs to an EDTF `date` that was read: a legacy `year` has no era to
     // name, and a date biber could not read has none either.

@@ -263,7 +263,6 @@ impl ControlFile {
     }
 }
 
-
 /// The `<bcf:key>name</bcf:key><bcf:value>v</bcf:value>` pairs in the options blocks.
 ///
 /// Every component repeats the same keys, so the last value wins; for `uniquelist` the

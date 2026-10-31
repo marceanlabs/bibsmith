@@ -47,7 +47,10 @@ fn no_panic(name: &str, bytes: &[u8]) {
 
 #[test]
 fn a_file_that_is_not_utf8_is_reported() {
-    no_panic("latin1.bib", b"@misc{k, author = {M\xfcller, J}, title = {T}}\n");
+    no_panic(
+        "latin1.bib",
+        b"@misc{k, author = {M\xfcller, J}, title = {T}}\n",
+    );
 }
 
 #[test]
@@ -110,7 +113,10 @@ fn a_crossref_loop_is_read_as_written_not_followed_forever() {
     );
     assert!(ok, "stderr: {err}");
     assert!(out.contains("@BOOK{a,"), "a must survive: {out}");
-    assert!(out.contains("CROSSREF = {b}"), "the field must survive: {out}");
+    assert!(
+        out.contains("CROSSREF = {b}"),
+        "the field must survive: {out}"
+    );
     assert!(out.contains("CROSSREF = {a}"), "{out}");
 }
 
@@ -131,7 +137,10 @@ fn a_legitimate_crossref_is_still_resolved() {
           @inbook{child, crossref={parent}, title={A Chapter}, pages={1--10}}\n",
     );
     assert!(ok, "stderr: {err}");
-    assert!(out.contains("PARENT") || out.contains("@INBOOK{child,"), "{out}");
+    assert!(
+        out.contains("PARENT") || out.contains("@INBOOK{child,"),
+        "{out}"
+    );
 }
 
 #[test]
@@ -144,14 +153,20 @@ fn a_crossref_inside_a_damaged_entry_is_still_not_followed() {
         b"@collection{a,\n title = {A},\n note = {@book{b, title={B}, crossref={a}}}\n}\n@book{c, crossref={a}, title={C}}\n",
     );
     assert!(ok, "stderr: {err}");
-    assert!(out.contains("@BOOK{c,"), "later entries must survive: {out}");
+    assert!(
+        out.contains("@BOOK{c,"),
+        "later entries must survive: {out}"
+    );
 }
 
 #[test]
 fn a_value_ending_in_a_backslash_does_not_swallow_its_delimiter() {
     // `given = {Knuth\}` escapes the closing brace and the rest of the entry spills onto the
     // page. A stray backslash at the end of a value is made even.
-    let (ok, out, err) = run("slash.bib", b"@misc{k, author = {Knuth\\, Donald E.}, title = {T}, year = {2000}}\n");
+    let (ok, out, err) = run(
+        "slash.bib",
+        b"@misc{k, author = {Knuth\\, Donald E.}, title = {T}, year = {2000}}\n",
+    );
     assert!(ok, "stderr: {err}");
     assert!(out.contains("KNUTH") || out.contains("Knuth"), "{out}");
 }
