@@ -506,3 +506,57 @@ fn a_document_with_two_sections_gets_two_refsections() {
     assert_eq!(ctl.sections[0].1, ["alpha", "beta"]);
     assert_eq!(ctl.sections[1].1, ["gamma", "delta"]);
 }
+
+#[test]
+fn a_book_author_is_inherited_through_a_crossref_chain() {
+    // `\DeclareDataInheritance{mvbook,book}{inbook,...}{\inherit{author}{bookauthor}}`:
+    // the book's author prints after "In:", and it survives a second hop through another
+    // inbook, which is what a chapter-of-a-chapter looks like.
+    let src = String::from(
+        "@book{parent, author = {Editor, Ed}, title = {Collected Works}, publisher = {P}, year = {1990}}\n\
+         @inbook{middle, author = {Writer, Wanda}, title = {Middle Piece}, crossref = {parent}, pages = {1--10}}\n\
+         @inbook{child, author = {Junior, Jim}, title = {Child Piece}, crossref = {middle}, pages = {11--20}}\n",
+    );
+    let db = biblatex::Bibliography::parse(&src).unwrap();
+    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.key, e.fields))
+        .collect();
+    for key in ["middle", "child"] {
+        let eff = bibsmith::merge::effective(&db, db.get(key).unwrap(), &raw);
+        let book = eff.names.iter().find(|(f, _)| f == "bookauthor");
+        assert!(book.is_some(), "{key} needs a bookauthor or the book's editor vanishes");
+        assert_eq!(book.unwrap().1[0].name, "Editor");
+    }
+}
+
+#[test]
+fn a_date_range_numbers_by_its_years_not_its_months() {
+    // `2001/2003` and `2001-05/2003-06` are both 2001–2003, so they are one label and take
+    // a/b; a plain 2001 is a different label and takes nothing.
+    let entries = [
+        ("@misc{r1, author = {Span, Sam}, title = {One}, date = {2001/2003}}", "r1"),
+        ("@misc{r2, author = {Span, Sam}, title = {Two}, date = {2001-05/2003-06}}", "r2"),
+    ];
+    let mut src = String::new();
+    for (e, _) in entries {
+        src.push_str(e);
+        src.push('\n');
+    }
+    src.push_str(&std::fs::read_to_string(oracle("doc/refs.bib")).unwrap());
+    let db = biblatex::Bibliography::parse(&src).unwrap();
+    let raw: HashMap<String, Vec<(String, String)>> = bibsmith::normalize::raw_expanded_entries(&src)
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.key, e.fields))
+        .collect();
+    let ents: Vec<_> = entries
+        .iter()
+        .map(|(_, k)| db.get(k).unwrap())
+        .collect();
+    let ordered = bibsmith::sort::sort_entries(&ents, bibsmith::Scheme::Nyt);
+    let extras = bibsmith::disambiguate::disambiguate(&ordered, bibsmith::Scheme::Nyt);
+    assert_eq!(extras.get("r1"), Some(&1), "the first range takes a");
+    assert_eq!(extras.get("r2"), Some(&2), "the second takes b");
+}

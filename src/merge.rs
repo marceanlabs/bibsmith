@@ -292,6 +292,13 @@ pub fn effective(
         .find(|(k, _)| k == "crossref" || k == "xref")
         .map(|(_, v)| v.trim().to_string());
 
+    // biblatex's `\inherit{author}{bookauthor}` for a book parent: the book's author is
+    // the child's *book* author, and it stays that way down a chain (a chapter of a
+    // chapter still names the book's author after "In:"). The rule is applied after the
+    // walk because the ancestor that carries it may be two hops up.
+    let own_kind = kind_of(entry);
+    let mut book_author: Option<Vec<Person>> = None;
+
     while let Some(key) = parent_key {
         if seen.contains(&key) {
             break; // a cycle would otherwise spin forever
@@ -300,6 +307,12 @@ pub fn effective(
         seen.push(key.clone());
 
         let parent_kind = kind_of(parent);
+        if matches!(parent_kind.as_str(), "book" | "mvbook") && book_author.is_none() {
+            let people = crate::names::names(parent, "author");
+            if !people.is_empty() {
+                book_author = Some(people);
+            }
+        }
         let parent_values = raw.get(&key).cloned().unwrap_or_else(|| {
             parent
                 .fields
@@ -345,6 +358,14 @@ pub fn effective(
             .iter()
             .find(|(k, _)| k == "crossref" || k == "xref")
             .map(|(_, v)| v.trim().to_string());
+    }
+
+    if let Some(people) = book_author {
+        if matches!(own_kind.as_str(), "inbook" | "bookinbook" | "suppbook")
+            && !names.iter().any(|(k, _)| k == "bookauthor")
+        {
+            names.push(("bookauthor".to_string(), people));
+        }
     }
 
     Effective {

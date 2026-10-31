@@ -68,9 +68,22 @@ fn label_year(entry: &Entry) -> String {
         .or_else(|| entry.get("year"))
         .map(|c| c.format_verbatim())
         .unwrap_or_default();
-    if raw.contains('/') || raw.contains("--") {
-        // A range is its own label year.
-        return raw;
+    // A range's label is its two *years*: `2001/2003` and `2001-05/2003-06` both number as
+    // 2001–2003, so biber prints 2001–2003a and then 2001–2003b. Leaving the raw string in
+    // the key would keep those two apart, and collapsing the range to its start would
+    // collide a range with a plain year — the corpus has `knuth:ct` at 1984 next to a
+    // 1984–1985 range, and biber prints them both unsuffixed.
+    if raw.contains('/') {
+        let years: Vec<String> = raw
+            .split('/')
+            .filter_map(|side| {
+                let digits: String = side.chars().filter(|c| c.is_ascii_digit()).collect();
+                (digits.len() >= 4).then(|| digits[..4].to_string())
+            })
+            .collect();
+        if years.len() == 2 {
+            return format!("{}–{}", years[0], years[1]);
+        }
     }
     let digits: String = raw.chars().take_while(|c| c.is_ascii_digit()).collect();
     if digits.len() >= 4 {
