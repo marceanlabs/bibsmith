@@ -80,8 +80,29 @@ Two rules had to be measured, because each obvious version failed one case:
 | `knuth:ct` (`date = {1984/1986}`, a range) does not share one with the 1984 volume `knuth:ct:a` | a range must not collapse to its first year |
 | `set` and `stdmodel` (a `@set`) get no suffix | an entry with no name and no title is not grouped on an empty label |
 
-Tests now: 16 (8 CLI contract, 4 normalisation, 4 order and disambiguation). Both modes
-round-trip through real biber with zero errors or warnings and an identical order.
+## Files from other producers, 31 October 2026
+
+`biblatex-examples.bib` is one producer's idea of a bibliography. Two files from elsewhere
+are now fixtures: the ACM `sig-alternate` sample (265 blocks, 163 `@String`, mixed-case
+entry types) and IEEEtran's `abbreviations.bib` (263 blocks). Two real bugs fell out:
+
+| Bug | How it showed | Fix |
+|---|---|---|
+| Entries written one after another on a single line | 265 `@` but only 164 lines started with one | push a newline after each entry |
+| A Latin-1 `.bib` was refused outright | `ieee-abrv.bib` failed with "stream did not contain valid UTF-8" | decode as Latin-1 and say so on standard error |
+| `@string` blocks were dropped from `sort` output | 163 definitions in the ACM file, 0 in the output | emit them before the entries, verbatim |
+
+What `biber --tool` does to a real legacy file, measured on the ACM sample: it deletes
+every field biblatex does not model (`month` 32 times, `numpages` 20, `acmid` 19,
+`lastaccessed` 8, `articleno` 6, `source` 4, `issue_date` 3), folds `month` into `date`,
+synthesises `type` for report entries, and skips one entry entirely because its author
+string `Werneck,, Renato` is malformed.
+
+So the exact-parity claim is scoped honestly: field sets match biber exactly on the
+biblatex corpus, and on arbitrary legacy BibTeX the guarantee is weaker and better —
+no field biber keeps is ever lost, and nothing the author wrote is deleted.
+
+Tests now: 20 (8 CLI contract, 4 normalisation, 4 order and disambiguation, 4 real files).
 
 ## Files
 

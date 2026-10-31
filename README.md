@@ -42,6 +42,11 @@ from: 100 `@` blocks, 92 entries, 8 `@string`, every awkward case the package au
 could think of. The expected order comes from a `.bbl` written by real biber 2.22 over
 that file, so the test compares against a different implementation, not against itself.
 
+Two files written by other people are also in the tests, because one producer's habits
+hide bugs: the ACM `sig-alternate` sample (265 blocks, 163 of them `@String`, entries in
+mixed case) and IEEEtran's `abbreviations.bib` (263 blocks, not valid UTF-8). Both keep
+every block through a sort, and no field that biber keeps is ever lost.
+
 Regenerate the fixtures with `scripts/make_oracle.sh` (needs `pdflatex` and `biber`).
 
 ## Why the order is not obvious
@@ -69,6 +74,11 @@ Each was found by measuring a mismatch against biber, then confirming the rule i
 - **LaTeX escapes are preserved, not decoded.** `{\"O}` stays `{\"O}`; `biber --tool`
   rewrites it to `Ö`. Same meaning, different bytes, and the one place a diff against
   biber's own rewrite shows anything on a file without other differences.
+- **`--normalise` does not delete fields.** `biber --tool` drops every field biblatex
+  does not model, and on a real ACM bibliography that is `month` on 32 entries, `numpages`
+  on 20, `acmid` on 19, `lastaccessed` on 8, plus `articleno`, `source` and `issue_date`.
+  It also folds `month` into `date` and invents `type` for report entries. This tool
+  renames the legacy aliases and leaves everything else exactly as the author wrote it.
 - **`--normalise` keeps `sorttitle`, `sortname`, `sortyear` and `presort`,** which
   `biber --tool` deletes. Those fields decide the order, and biber's own `--tool` output
   demonstrably reorders a bibliography when fed back through biblatex.

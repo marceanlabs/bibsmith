@@ -55,8 +55,25 @@ fn main() -> ExitCode {
     }
 }
 
+/// Read a bibliography, accepting the Latin-1 files real tools still produce.
+///
+/// `ieee-abrv.bib` from CTAN is not valid UTF-8, and refusing it is not a defensible
+/// answer for a tool that reads other people's databases. UTF-8 is tried first; a
+/// file that fails is decoded as Latin-1 and a note goes to standard error, so the
+/// substitution is never silent.
 fn read(path: &PathBuf) -> Result<String, String> {
-    std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
+    let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    match String::from_utf8(bytes) {
+        Ok(text) => Ok(text),
+        Err(err) => {
+            eprintln!(
+                "bibsmith: {}: not valid UTF-8, decoding as Latin-1 ({})",
+                path.display(),
+                err.utf8_error()
+            );
+            Ok(err.into_bytes().iter().map(|b| *b as char).collect())
+        }
+    }
 }
 
 fn run(cli: Cli) -> Result<(), String> {
@@ -103,6 +120,11 @@ fn run(cli: Cli) -> Result<(), String> {
             } else {
                 for entry in ordered {
                     text.push_str(&entry.to_biblatex_string());
+                    // `to_biblatex_string` does not always end with a newline, and two
+                    // entries joined on one line is a file nobody can diff.
+                    if !text.ends_with('\n') {
+                        text.push('\n');
+                    }
                 }
             }
 
