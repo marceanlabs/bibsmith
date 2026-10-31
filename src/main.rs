@@ -103,7 +103,7 @@ fn run(cli: Cli) -> Result<(), String> {
             // `@string` definitions are needed in both modes: entries refer to the
             // macros by name, and a file without them resolves to literal text.
             for block in db.string_blocks() {
-                text.push_str(block);
+                text.push_str(&upper_string_block(block));
                 text.push('\n');
             }
             {
@@ -410,4 +410,19 @@ fn run(cli: Cli) -> Result<(), String> {
             Ok(())
         }
     }
+}
+
+/// `@string{dtv = ...}` is written `@STRING{DTV = ...}`, as biber writes it.
+fn upper_string_block(block: &str) -> String {
+    let Some(open) = block.find('{') else { return block.to_string() };
+    let rest = &block[open + 1..];
+    let Some(eq) = rest.find('=') else { return block.to_string() };
+    let name = rest[..eq].trim();
+    format!(
+        "@STRING{{{} = {}",
+        name.to_uppercase(),
+        rest[eq + 1..].trim_start()
+    )
+    .trim_end()
+    .to_string()
 }

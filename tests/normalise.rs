@@ -155,7 +155,7 @@ fn writer_uses_uppercase_sorted_fields_and_braces() {
     let entry = ours.iter().find(|e| e.key == "aksin").expect("aksin");
     let text = write_raw(entry);
 
-    assert!(text.starts_with("@article{aksin,\n"), "{text}");
+    assert!(text.starts_with("@ARTICLE{aksin,\n"), "biber writes the type in capitals: {text}");
     let names: Vec<&str> = text
         .lines()
         .filter_map(|l| l.trim().split_once('=').map(|(n, _)| n.trim()))
@@ -208,7 +208,7 @@ fn accents_are_decoded_the_way_biber_writes_them() {
     assert_eq!(decode_accents("{\\\"O}zge"), "Özge");
     assert_eq!(decode_accents("T{\\\"u}rkmen"), "Türkmen");
     assert_eq!(decode_accents("{\\c{C}}etinkaya"), "Çetinkaya");
-    assert_eq!(decode_accents("Aks{\\i}n"), "Aksın");
-    assert_eq!(decode_accents("Unzeitgem{\\\"a}{\\ss}e"), "Unzeitgemäße");
+    assert_eq!(decode_accents("Aks{\\i}n"), "Aks{ı}n", "biber keeps the braces around a letter command");
+    assert_eq!(decode_accents("Unzeitgem{\\\"a}{\\ss}e"), "Unzeitgemä{ß}e");
     assert_eq!(decode_accents("plain text"), "plain text", "nothing to do, nothing changed");
 }

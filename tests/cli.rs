@@ -38,14 +38,14 @@ fn sorts_to_stdout() {
     let blocks = text.matches('@').count();
     assert_eq!(blocks, 100, "block count, got {blocks}");
     assert!(
-        text.contains("@string"),
-        "@string definitions must be written back"
+        text.contains("@STRING"),
+        "@string definitions must be written back, in capitals as biber writes them"
     );
     assert!(
-        text.contains("@article{aksin,"),
+        text.contains("@ARTICLE{aksin,"),
         "first entry should be aksin"
     );
-    assert_eq!(text.matches("@article").count(), 20, "article count");
+    assert_eq!(text.matches("@ARTICLE").count(), 20, "article count");
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn writes_to_output_file() {
         .expect("run");
     assert!(out.status.success());
     let text = std::fs::read_to_string(&dest).expect("read output");
-    assert!(text.contains("@article{aksin,"));
+    assert!(text.contains("@ARTICLE{aksin,"));
 }
 
 #[test]
@@ -130,7 +130,7 @@ fn output_may_overwrite_the_input() {
     );
     let text = std::fs::read_to_string(&copy).expect("read");
     assert!(
-        text.contains("@article{aksin,"),
+        text.contains("@ARTICLE{aksin,"),
         "the file must still be a database"
     );
 }

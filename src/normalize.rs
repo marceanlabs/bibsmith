@@ -175,6 +175,14 @@ pub fn normalise_raw(entry: &RawEntry<'_>) -> RawNormalised {
 /// `100%` into `100\%`. biblatex reads those literally, so a database that has been
 /// through that writer no longer means what it said.
 pub fn normalise_raw_with(entry: &RawEntry<'_>, rename: bool) -> RawNormalised {
+    normalise_raw_macros(entry, rename, &HashMap::new())
+}
+
+fn normalise_raw_macros(
+    entry: &RawEntry<'_>,
+    rename: bool,
+    macros: &HashMap<String, String>,
+) -> RawNormalised {
     let mut fields: Vec<(String, String, bool)> = Vec::new();
     let mut renamed: Vec<(String, String)> = Vec::new();
     let mut dropped: Vec<String> = Vec::new();
@@ -203,6 +211,46 @@ pub fn normalise_raw_with(entry: &RawEntry<'_>, rename: bool) -> RawNormalised {
         // biber joins a value that was wrapped over several lines into one line
         // and collapses the indentation, so every value gets the same treatment.
         let mut text = collapse_whitespace(&raw_text);
+        if rename && crate::merge::NAME_FIELDS.contains(&target.as_str()) && !abbreviation {
+            text = family_first(&text);
+        }
+        // A macro that is not the whole value has to become its text: biber writes
+        // `dtv and {Walter de Gruyter}` as `Deutscher Taschenbuch-Verlag and Walter de
+        // Gruyter`. A value that is exactly one macro stays bare.
+        if rename && !abbreviation && text.contains(char::is_alphabetic) {
+            let mut expanded = String::with_capacity(text.len());
+            let mut rest = text.as_str();
+            while let Some(pos) = rest.find(|c: char| c.is_alphabetic()) {
+                let (before, from) = rest.split_at(pos);
+                expanded.push_str(before);
+                let end = from
+                    .find(|c: char| !(c.is_alphanumeric() || c == '-' || c == '_'))
+                    .unwrap_or(from.len());
+                let word = &from[..end];
+                match macros.get(&word.to_ascii_lowercase()) {
+                    Some(value) => expanded.push_str(value),
+                    None => expanded.push_str(word),
+                }
+                rest = &from[end..];
+            }
+            expanded.push_str(rest);
+            text = expanded;
+        }
+        if target == "options" && rename {
+            // biber writes `useprefix=1`, not `useprefix`.
+            text = text
+                .split(',')
+                .map(|o| {
+                    let o = o.trim();
+                    if o.is_empty() || o.contains('=') {
+                        o.to_string()
+                    } else {
+                        format!("{o}=1")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+        }
         if rename {
             // `biber --tool` writes UTF-8: `{\"O}zge` is `Özge` in its output. Sorting
             // without --normalise leaves the file as the author wrote it.
@@ -234,7 +282,8 @@ pub fn normalise_raw_with(entry: &RawEntry<'_>, rename: bool) -> RawNormalised {
 pub fn write_raw(entry: &RawNormalised) -> String {
     let mut out = String::new();
     out.push('@');
-    out.push_str(&entry.kind);
+    // biber writes the type and the field names in capitals.
+    out.push_str(&entry.kind.to_uppercase());
     out.push('{');
     out.push_str(&entry.key);
     out.push(',');
@@ -305,10 +354,11 @@ pub fn normalise_all(src: &str) -> Result<Vec<RawNormalised>, biblatex::ParseErr
 
 pub fn normalise_all_with(src: &str, rename: bool) -> Result<Vec<RawNormalised>, biblatex::ParseError> {
     let raw = RawBibliography::parse(src)?;
+    let macros = if rename { macro_table(src) } else { Default::default() };
     Ok(raw
         .entries
         .iter()
-        .map(|e| normalise_raw_with(&e.v, rename))
+        .map(|e| normalise_raw_macros(&e.v, rename, &macros))
         .collect())
 }
 
@@ -589,7 +639,11 @@ pub fn decode_accents(text: &str) -> String {
             let name = format!("\\{command}");
             if let Some((_, ch)) = SINGLES.iter().find(|(n, _)| *n == name) {
                 if chars.get(j) == Some(&'}') {
+                    // biber keeps the braces around a letter command: `Aks{\i}n` becomes
+                    // `Aks{ı}n`, while an accent over a letter (`{\"O}zge`) loses them.
+                    out.push('{');
                     out.push(*ch);
+                    out.push('}');
                     i = j + 1;
                     continue;
                 }
@@ -599,4 +653,32 @@ pub fn decode_accents(text: &str) -> String {
         i += 1;
     }
     out.nfc().collect()
+}
+
+/// Rewrite `Given Family` as `Family, Given`, the way `biber --tool` writes a name.
+///
+/// Only the unambiguous case is touched: a name already written `Family, Given`, a list
+/// with braces (a corporate name can contain "and"), or anything with a command in it is
+/// left exactly as the author wrote it. Guessing there would corrupt a name that is
+/// already correct.
+fn family_first(value: &str) -> String {
+    if value.contains('{') || value.contains('\\') {
+        return value.to_string();
+    }
+    // Each name is decided on its own: `Brigitte Goldstein and Smith, John` keeps Smith as
+    // it is and rewrites the other, which is what biber does.
+    let mut out = Vec::new();
+    for part in value.split(" and ") {
+        if part.contains(',') {
+            out.push(part.to_string());
+            continue;
+        }
+        let words: Vec<&str> = part.split_whitespace().collect();
+        if words.len() < 2 {
+            return value.to_string();
+        }
+        let (family, given) = words.split_last().unwrap();
+        out.push(format!("{family}, {}", given.join(" ")));
+    }
+    out.join(" and ")
 }
