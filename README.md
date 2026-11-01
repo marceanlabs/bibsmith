@@ -22,12 +22,15 @@ swapped in by changing one word. It replaces the biber *step*:
 $ bibsmith bbl paper.bcf        # instead of: biber paper
 ```
 
-Or wire it into latexmk, which already knows the three passes:
+Or wire it into latexmk, which already knows how many passes a bibliography needs:
 
 ```perl
 # .latexmkrc
-$biber = 'bibsmith bbl %O %S.bcf';
+$biber = "bibsmith bbl %S";
 ```
+
+`bibsmith` writes the `.blg` log latexmk reads after the bibliography step, so a latexmk
+build settles with that one line and no other changes.
 
 ## Commands
 

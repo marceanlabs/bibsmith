@@ -429,6 +429,34 @@ fn run(cli: Cli) -> Result<(), String> {
 
             let dest = out.unwrap_or_else(|| bcf.with_extension("bbl"));
             std::fs::write(&dest, text).map_err(|e| format!("{}: {e}", dest.display()))?;
+            // latexmk reads biber's `.blg` after the bibliography step: a missing log is
+            // a failed run, and the data sources are learnt from the `INFO - Found ... 'x'`
+            // lines. The prefix is biber's shape, `[time] module:line> level - message`,
+            // because that is what latexmk matches.
+            let log = bcf.with_extension("blg");
+            let mut journal = String::new();
+            let mut line = |text: String| journal.push_str(&format!("[0] bibsmith:1> {text}\n"));
+            line(format!(
+                "INFO - This is bibsmith {} (a biber-compatible .bbl writer)",
+                env!("CARGO_PKG_VERSION")
+            ));
+            if let Some(name) = log.file_name().and_then(|n| n.to_str()) {
+                line(format!("INFO - Logfile is '{name}'"));
+            }
+            if let Some(name) = bcf.file_name().and_then(|n| n.to_str()) {
+                line(format!("INFO - Reading '{name}'"));
+            }
+            for source in &ctl.datasources {
+                if let Some(name) = std::path::Path::new(source)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                {
+                    line(format!("INFO - Found BibTeX data source '{name}'"));
+                }
+            }
+            line(format!("INFO - Output to {}", dest.display()));
+            line("INFO - ERRORS: 0".to_string());
+            let _ = std::fs::write(&log, journal);
             eprintln!("bibsmith: wrote {}", dest.display());
             Ok(())
         }
