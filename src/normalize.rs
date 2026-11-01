@@ -329,8 +329,6 @@ pub fn write_raw(entry: &RawNormalised) -> String {
 /// The `.bbl` writer needs this rather than the resolved values: biblatex prints
 /// what the author wrote, and `{\TeX}` decoded to `TeX` prints differently.
 /// A citation key and the fields written for it.
-pub type KeyedFields = (String, Vec<(String, String)>);
-
 /// One entry's author-written fields, typed but not renamed.
 ///
 /// The `.bbl` writer and `crossref` resolution both work from this: biblatex prints
@@ -852,20 +850,23 @@ pub fn decode_accents(text: &str) -> String {
                 if braced {
                     k += 1;
                 }
-                if let Some(&base) = chars.get(k) {
-                    let combining = MARKS.iter().find(|(m, _)| Some(*m) == mark).unwrap().1;
-                    let close = if braced { k + 2 } else { k + 1 };
-                    let closed = if braced {
-                        chars.get(k + 1) == Some(&'}')
-                    } else {
-                        true
-                    };
-                    let outer = chars.get(close) == Some(&'}');
-                    if closed && outer {
-                        out.push(base);
-                        out.push(combining);
-                        i = close + 1;
-                        continue;
+                // `is_mark` above proved the command is one of these; it is read as an
+                // Option anyway, so a library call can never panic on it.
+                if let Some(&(_, combining)) = MARKS.iter().find(|(m, _)| Some(*m) == mark) {
+                    if let Some(&base) = chars.get(k) {
+                        let close = if braced { k + 2 } else { k + 1 };
+                        let closed = if braced {
+                            chars.get(k + 1) == Some(&'}')
+                        } else {
+                            true
+                        };
+                        let outer = chars.get(close) == Some(&'}');
+                        if closed && outer {
+                            out.push(base);
+                            out.push(combining);
+                            i = close + 1;
+                            continue;
+                        }
                     }
                 }
             }
@@ -911,8 +912,9 @@ fn family_first(value: &str) -> String {
         if words.len() < 2 {
             return value.to_string();
         }
-        let (family, given) = words.split_last().unwrap();
-        out.push(format!("{family}, {}", given.join(" ")));
+        if let Some((family, given)) = words.split_last() {
+            out.push(format!("{family}, {}", given.join(" ")));
+        }
     }
     out.join(" and ")
 }

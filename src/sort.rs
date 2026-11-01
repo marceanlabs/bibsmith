@@ -147,61 +147,6 @@ fn person_key(p: &Person) -> String {
     s
 }
 
-fn name_part(entry: &Entry) -> Vec<String> {
-    let names = sort_names(entry);
-    if names.is_empty() {
-        // BibTeX's legacy `key` field is what a manual or a web page uses to say where
-        // it should file: `key = {Harvard CodeBlue}` sorts under H. Only when there is
-        // no key does the title decide, which is biblatex's stated rule for entries
-        // without an author or editor.
-        if let Some(key) = plain(entry, "key").or_else(|| plain(entry, "sortkey")) {
-            if !key.trim().is_empty() {
-                // A legacy `key` is often markup rather than text: `Kn{\printfirst{v}{1987}}`
-                // files under "Knv", next to names beginning that way, and collating the
-                // braces instead puts it before them.
-                return vec![sort_text(&key)];
-            }
-        }
-        return vec![title_part(entry)];
-    }
-    names.iter().map(person_key).collect()
-}
-
-fn year_part(entry: &Entry) -> String {
-    year_part_or(entry, "")
-}
-
-/// `ynt` writes `\literal{9999}` after the year fields, so an entry with no year
-/// sorts last rather than first. Same function, different fallback.
-fn year_part_or(entry: &Entry, fallback: &str) -> String {
-    // `sortyear` wins, then `date`, then `year`. biber rewrites `year` to `date`
-    // on the way out, so both are read here.
-    let raw = if let Some(y) = plain(entry, "sortyear") {
-        y
-    } else {
-        let value = plain(entry, "date")
-            .or_else(|| plain(entry, "year"))
-            .unwrap_or_default();
-        let digits: String = value.chars().take_while(|c| c.is_ascii_digit()).collect();
-        if digits.len() >= 4 {
-            digits[..4].to_string()
-        } else {
-            value
-        }
-    };
-    if raw.trim().is_empty() {
-        fallback.to_string()
-    } else {
-        raw
-    }
-}
-
-fn title_part(entry: &Entry) -> String {
-    plain(entry, "sorttitle")
-        .or_else(|| plain(entry, "title"))
-        .unwrap_or_default()
-}
-
 /// The parts of one entry's key, in comparison order.
 ///
 /// The order is not guessed: it is transcribed from `biblatex.def` as installed
@@ -220,10 +165,6 @@ fn title_part(entry: &Entry) -> String {
 /// reproduce that — the collator ignores the separator, so `Smith, John and Jones` and
 /// `Smith, John A.` compare only on "Smith John", and the second name never gets a say.
 pub type Parts = Vec<Vec<String>>;
-
-fn one(s: String) -> Vec<String> {
-    vec![sort_text(&s)]
-}
 
 /// A sort key as the collator should see it: without the braces that protect a letter's
 /// case and without the names of TeX commands, which are markup rather than text.
@@ -250,86 +191,57 @@ fn sort_text(value: &str) -> String {
 
 /// The parts of one entry's sort key, in comparison order. Public because
 /// explaining an order is a feature: `bibsmith sort --explain` prints these.
-pub fn parts(entry: &Entry, scheme: Scheme, db: &std::collections::HashMap<&str, &Entry>) -> Parts {
-    if let Some(member) = first_set_member(entry, db) {
-        let mut seen = vec![entry.key.to_string()];
-        return key_parts_inner(member, scheme, db, &mut seen);
-    }
-    key_parts_inner(entry, scheme, db, &mut Vec::new())
-}
-
-fn key_parts_inner(
-    entry: &Entry,
-    scheme: Scheme,
-    db: &std::collections::HashMap<&str, &Entry>,
-    seen: &mut Vec<String>,
-) -> Parts {
-    if seen.len() < 3 {
-        if let Some(member) = first_set_member(entry, db) {
-            if !seen.iter().any(|k| k == &member.key.to_string()) {
-                seen.push(member.key.to_string());
-                return key_parts_inner(member, scheme, db, seen);
-            }
+/// The template each named scheme stands for, as biblatex writes it in a `.bcf`.
+///
+/// `sort --scheme` is the only caller: a document's own control file always names a
+/// template, and that template is the rule. Keeping one implementation means a rule fixed
+/// for `bbl` (a legacy `key` read as text, a date group that falls through to the next
+/// field) cannot go missing for `sort`.
+pub fn groups_for(scheme: Scheme) -> Vec<crate::bcf::SortGroup> {
+    use crate::bcf::{SortGroup, SortItem};
+    let field = |name: &str| SortItem::Field(name.to_string());
+    let group = |items: Vec<SortItem>| SortGroup {
+        finalsort: false,
+        descending: false,
+        items,
+    };
+    let mut groups = vec![group(vec![field("presort")])];
+    let names = group(vec![
+        field("sortname"),
+        field("author"),
+        field("editor"),
+        field("translator"),
+        field("sorttitle"),
+        field("title"),
+    ]);
+    let title = group(vec![field("sorttitle"), field("title")]);
+    let year = group(vec![field("sortyear"), field("year")]);
+    let volume = group(vec![field("volume"), SortItem::Literal("0".to_string())]);
+    let sortkey = group(vec![field("sortkey")]);
+    match scheme {
+        Scheme::Nty => {
+            groups.extend([names, title, year, volume, sortkey]);
+        }
+        Scheme::Nyt => {
+            groups.extend([names, year, title, volume, sortkey]);
+        }
+        Scheme::Ynt => {
+            // `ynt` writes `\literal{9999}` after the year, so an undated entry sorts last.
+            let year = group(vec![
+                field("sortyear"),
+                field("year"),
+                SortItem::Literal("9999".to_string()),
+            ]);
+            groups.extend([year, names, title, sortkey]);
         }
     }
-    match scheme {
-        Scheme::Nty => vec![
-            one(presort_part(entry)),
-            name_part(entry),
-            one(title_part(entry)),
-            one(year_part(entry)),
-            one(volume_part(entry)),
-            one(sortkey_part(entry)),
-        ],
-        Scheme::Nyt => vec![
-            one(presort_part(entry)),
-            name_part(entry),
-            one(year_part(entry)),
-            one(title_part(entry)),
-            one(volume_part(entry)),
-            one(sortkey_part(entry)),
-        ],
-        Scheme::Ynt => vec![
-            one(presort_part(entry)),
-            one(year_part_or(entry, "9999")),
-            name_part(entry),
-            one(title_part(entry)),
-            one(sortkey_part(entry)),
-        ],
-    }
+    groups
 }
 
-fn presort_part(entry: &Entry) -> String {
-    plain(entry, "presort").unwrap_or_default()
-}
-
-/// `\sort[final]{\field{sortkey}}`: a tiebreak of last resort, empty by default.
-fn sortkey_part(entry: &Entry) -> String {
-    plain(entry, "sortkey").unwrap_or_default()
-}
-
-/// `\sort{\field{volume}\literal{0}}`: an entry with no volume sorts as "0", which
-/// is why a print article with `volume = 12` files AFTER its own online-only
-/// twin. Measured: that pair is `baez/article` vs `baez/online` in the corpus.
-fn volume_part(entry: &Entry) -> String {
-    plain(entry, "volume").unwrap_or_else(|| "0".to_string())
-}
-
-/// Keys in order, compared with ICU collation in the `en-US` locale, which is the
-/// locale biber resolved for this corpus. No scheme in biblatex's defaults sorts
-/// descending (`ydnt` does, and is not implemented here), so nothing is reversed.
+/// Keys in order, compared with ICU collation in the `en-US` locale, which is the locale
+/// biber resolved for this corpus.
 pub fn sort_entries<'a>(entries: &[&'a Entry], scheme: Scheme) -> Vec<&'a Entry> {
-    let db: std::collections::HashMap<&str, &Entry> =
-        entries.iter().map(|e| (e.key.as_str(), *e)).collect();
-    let locale: icu_locale::Locale = "en-US".parse().expect("en-US parses");
-    let collator = Collator::try_new(locale.into(), CollatorOptions::default())
-        .expect("compiled-in collation data");
-    let mut keyed: Vec<(Parts, &Entry)> = entries
-        .iter()
-        .map(|e| (parts(e, scheme, &db), *e))
-        .collect();
-    keyed.sort_by(|a, b| compare_parts(&collator, &a.0, &b.0, &[]));
-    keyed.into_iter().map(|(_, e)| e).collect()
+    sort_entries_by_template(entries, &groups_for(scheme), &Default::default())
 }
 
 fn compare_parts(
@@ -497,8 +409,23 @@ pub fn template_parts(
     extra: &std::collections::HashMap<String, String>,
     db: &std::collections::HashMap<&str, &Entry>,
 ) -> Parts {
-    if let Some(member) = first_set_member(entry, db) {
-        return template_parts(member, groups, extra, db);
+    template_parts_inner(entry, groups, extra, db, &mut Vec::new())
+}
+
+fn template_parts_inner(
+    entry: &Entry,
+    groups: &[crate::bcf::SortGroup],
+    extra: &std::collections::HashMap<String, String>,
+    db: &std::collections::HashMap<&str, &Entry>,
+    seen: &mut Vec<String>,
+) -> Parts {
+    // A `@set` sorts under its first member, and a set that lists itself must not be
+    // followed round: the entry is then sorted on its own values.
+    if seen.len() < 3 && !seen.iter().any(|k| k == &entry.key) {
+        if let Some(member) = first_set_member(entry, db) {
+            seen.push(entry.key.to_string());
+            return template_parts_inner(member, groups, extra, db, seen);
+        }
     }
     let mut parts = Parts::new();
     for group in groups {

@@ -1,6 +1,6 @@
 //! Print the sort key bibsmith computes for named entries.
 //! `cargo run --example dump_keys -- oracle/refs.bib nyt vizedom:related vazques-de-parga`
-use bibsmith::{Database, Scheme, sort_parts};
+use bibsmith::{Database, Scheme};
 use std::collections::HashMap;
 
 fn main() {
@@ -18,7 +18,12 @@ fn main() {
     for w in &wanted {
         match db.get(w) {
             Some(e) => {
-                let k = sort_parts(e, scheme, &map);
+                let k = bibsmith::sort::template_parts(
+                    e,
+                    &bibsmith::sort::groups_for(scheme),
+                    &HashMap::new(),
+                    &map,
+                );
                 println!("{w}\n   parts: {k:?}");
             }
             None => println!("{w}: not in database"),
