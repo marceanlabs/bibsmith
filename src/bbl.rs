@@ -67,26 +67,6 @@ fn initials(text: &str, period: &str) -> String {
     out
 }
 
-/// A stable hash for a name list, used to decide the dash.
-///
-/// biblatex prints a dash instead of a repeated author when the printed name list is the
-/// same as the previous entry's. Comparing the whole list is stricter than comparing
-/// biber's truncated `namehash`, and stricter is what the rendered pages agree with.
-fn name_hash(people: &[Person]) -> String {
-    let mut canonical = String::new();
-    for p in people {
-        canonical.push_str(&p.name);
-        canonical.push('|');
-        canonical.push_str(&p.given_name);
-        canonical.push('|');
-        canonical.push_str(&p.prefix);
-        canonical.push('|');
-        canonical.push_str(&p.suffix);
-        canonical.push(';');
-    }
-    format!("{:x}", md5::compute(canonical.as_bytes()))
-}
-
 /// biber's `normalise_string_hash`, before the digest.
 ///
 /// `\LaTeX` becomes `LaTeX:`, `\"o` becomes `34:o`, and braces, ties, dots and spaces go:
@@ -547,6 +527,8 @@ fn name_block(
     year: &str,
     levels: &std::collections::HashMap<(String, String, String), u8>,
     ul: Option<usize>,
+    template: &[crate::bcf::HashPart],
+    uniquename: bool,
 ) -> String {
     let mut out = String::new();
     let options = match ul {
@@ -566,23 +548,26 @@ fn name_block(
             ))
             .copied()
             .unwrap_or(0);
-        let part = if level == 0 { "base" } else { "given" };
-        out.push_str(&format!(
-            "        {{{{un={level},uniquepart={part},hash={}}}{{%\n",
-            name_hash(std::slice::from_ref(p))
-        ));
-        if !p.prefix.is_empty() {
+        // One person, hashed the way biber hashes the whole list: biblatex compares these
+        // per-name values to decide which parts of which names to expand.
+        let hash = list_hash(std::slice::from_ref(p), template, 1, false);
+        if uniquename {
+            let part = if level == 0 { "base" } else { "given" };
             out.push_str(&format!(
-                "           prefix={{{}}},\n",
-                balanced(typeset(&p.prefix))
+                "        {{{{un={level},uniquepart={part},hash={hash}}}{{%\n"
             ));
+        } else {
+            // With `uniquename=false` biber writes the hash alone: there is nothing to
+            // disambiguate, and biblatex ignores the level.
+            out.push_str(&format!("        {{{{hash={hash}}}{{%\n"));
         }
-        out.push_str(&format!(
-            "           family={{{}}},\n",
-            balanced(typeset(&p.name))
-        ));
-        out.push_str(&format!(
-            "           familyi={{{}}},\n",
+        let mut attrs: Vec<String> = Vec::new();
+        if !p.prefix.is_empty() {
+            attrs.push(format!("prefix={{{}}}", balanced(typeset(&p.prefix))));
+        }
+        attrs.push(format!("family={{{}}}", balanced(typeset(&p.name))));
+        attrs.push(format!(
+            "familyi={{{}}}",
             balanced(typeset(&initials(&p.name, "\\bibinitperiod")))
         ));
         if !p.given_name.is_empty() {
@@ -591,24 +576,27 @@ fn name_block(
             // after a word the wider `\bibnamedelima`. One space for both reflows the
             // page: "G. E. L. Owen" breaks in the wrong place.
             let given = join_given_parts(&p.given_name);
-            out.push_str(&format!(
-                "           given={{{}}},\n",
-                balanced(typeset(&given))
-            ));
-            out.push_str(&format!(
-                "           giveni={{{}}},\n",
+            attrs.push(format!("given={{{}}}", balanced(typeset(&given))));
+            attrs.push(format!(
+                "giveni={{{}}}",
                 balanced(typeset(&initials(&p.given_name, "\\bibinitperiod")))
             ));
+            // The level is per name part, and the only part the template expands is the
+            // given name, so `givenun` is what biblatex reads.
+            if uniquename {
+                attrs.push(format!("givenun={level}"));
+            }
         }
         if !p.suffix.is_empty() {
-            out.push_str(&format!(
-                "           suffix={{{}}},\n",
-                balanced(typeset(&p.suffix))
-            ));
+            attrs.push(format!("suffix={{{}}}", balanced(typeset(&p.suffix))));
         }
-        // No blank line here: `\name` scans its argument, and a blank line is a `\par`,
-        // which ends the scan and spills the rest of the attributes onto the page.
-        out.push_str("}}%");
+        // The last attribute closes the name, so `}}%` never gets a line of its own.
+        let last = attrs.len().saturating_sub(1);
+        for (j, attr) in attrs.iter().enumerate() {
+            out.push_str("           ");
+            out.push_str(attr);
+            out.push_str(if j == last { "}}%" } else { ",\n" });
+        }
         if i + 1 < people.len() {
             out.push('\n');
         }
@@ -1145,8 +1133,13 @@ pub fn write_bbl_full(
 ///
 /// Every list gets a role-prefixed group; the one the label is built from also gets the
 /// four unprefixed ones, in biber's own order.
-fn write_name_hashes(out: &mut String, ctl: &ControlFile, entry: &Effective, label: &str) {
-    let template = ctl.hash_template("global");
+fn write_name_hashes(
+    out: &mut String,
+    ctl: &ControlFile,
+    entry: &Effective,
+    label: &str,
+    template: &[crate::bcf::HashPart],
+) {
     let opt = |name: &str, fallback: usize| {
         ctl.option(name)
             .and_then(|v| v.parse().ok())
@@ -1159,7 +1152,7 @@ fn write_name_hashes(out: &mut String, ctl: &ControlFile, entry: &Effective, lab
     // The four values for one list, keyed as biber keys them: truncated bibliography
     // first, then truncated citation, then the whole list twice.
     let group = |field: &str, people: &[Person]| {
-        let h = |visible: usize, raw: bool| list_hash(people, &template, visible, raw);
+        let h = |visible: usize, raw: bool| list_hash(people, template, visible, raw);
         [
             (
                 format!("{field}bibnamehash"),
@@ -1241,6 +1234,10 @@ fn write_entry(
     }
 
     let year = entry_year(entry);
+    let template = ctl.hash_template("global");
+    // An entry that is not in the bibliography proper (a set member, a `related` copy)
+    // gets no disambiguation at all: biber writes the per-name hashes and nothing else.
+    let uniquename = ctl.option("uniquename") != Some("false") && !options.contains("skipbib=true");
     let entry_options = entry
         .values
         .iter()
@@ -1254,7 +1251,9 @@ fn write_entry(
         } else {
             None
         };
-        out.push_str(&name_block(field_name, people, &year, levels, ul));
+        out.push_str(&name_block(
+            field_name, people, &year, levels, ul, &template, uniquename,
+        ));
         if label_source.is_empty()
             && matches!(field_name.as_str(), "author" | "editor" | "translator")
         {
@@ -1271,7 +1270,7 @@ fn write_entry(
         }
     }
 
-    write_name_hashes(out, ctl, entry, &label_source);
+    write_name_hashes(out, ctl, entry, &label_source, &template);
 
     let sortinit = ranks_init
         .get(entry.key.as_str())

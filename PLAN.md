@@ -30,6 +30,9 @@ written, each verified by `scripts/check-pdf.sh`.
    One to two weeks, and it forces the refinement below.
    *The name hashes it needs are done (2 Nov 2026): all 102 entries match biber's
    `\strng` values, which was the blocker.*
+   *`uniquename` and `uniquelist` are done too (2 Nov 2026): `un`, `uniquepart`,
+   `givenun`, the per-name `hash` and `ul` match biber on `oracle/uniq/`. What is left
+   is `uniquetitle`, which needs a document that sets `labeltitle`.*
 3. **The rest of the `.bbl` fields** biber writes and we skip: `\true{nocite}`,
    `\field{range}`, `\field{labelnumber}` for set members, `\field{origfields}`,
    `\field{ids}`. Two to three days; each one is a line in the writer once measured.

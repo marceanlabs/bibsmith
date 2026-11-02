@@ -30,3 +30,6 @@ oracle/**/*.ours
 !oracle/nyt.bcf
 !oracle/style-nyvt.bcf
 .hermes/
+
+# The expected output of the uniqueness fixture is a fixture, not a build artefact.
+!oracle/uniq/uniq.expected.bbl

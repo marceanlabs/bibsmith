@@ -241,3 +241,36 @@ now chosen with the same `use*` rules the sort key already used.
 
 Not yet modelled: `uniquelist` raises the visible count, and a per-entry or per-name-list
 `namehashtemplate` is not read, only `global`.
+
+## uniquename and uniquelist, 2 November 2026
+
+The `\name` block carries the fields biblatex reads to decide which names to expand:
+`un` (the level), `uniquepart` (`base` or `given`), `givenun` (the level of the given
+name) and a per-name `hash`. We wrote a level, and a hash of our own shape, and no
+`givenun` at all — so `uniquename` had nothing to work with even where the levels were
+right.
+
+Measured against a document built to need all of it (`oracle/uniq/`, nine entries):
+
+- three `Smith`s in one year: John and Jane share an initial and get level 2, John A.
+  does not and gets 1, because `J. A.` is not `J.`;
+- two three-name lists sharing first and last author get `ul=2`, so `uniquelist` widens
+  the visible list to the second name;
+- a repeated author alone is level 0, with `givenun=0` still written.
+
+Three fixes, all verified against that fixture and still identical pages on the four
+typeset documents:
+
+- the per-name hash is biber's: one person hashed through the same template as a list;
+- `givenun` is written for every name that has a given part, whatever its level;
+- an entry that is not in the bibliography proper (a set member, a `related` copy) gets
+  the per-name hashes and nothing else, because biber skips disambiguation for it.
+
+Known differences left, none of which changes a page:
+
+- a name part biber protects (`Aks{\i}n`) is written by us as UTF-8 (`Aksın`);
+- `sortinithash` is md5 of an ICU sort key here and of a Perl `Unicode::Collate` key
+  there, so the values differ. Both are only compared for equality within one file;
+- `uniquetitle` is not written: it needs `labeltitle`, which none of the fixtures use.
+- fields after `sortinithash` are written in a different order than biber's; biblatex
+  reads them by name, and the pages agree.

@@ -1,0 +1,313 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{nyt/global//global/global/global}
+    \entry{b1}{article}{}{}
+      \name{author}{3}{ul=2}{%
+        {{un=0,uniquepart=base,hash=930625160640f7b8c94f327d731f3bad}{%
+           family={Jones},
+           familyi={J\bibinitperiod},
+           given={Alice},
+           giveni={A\bibinitperiod},
+           givenun=0}}%
+        {{un=2,uniquepart=given,hash=68daf6a0f5044b721bd1b19645b725d7}{%
+           family={Brown},
+           familyi={B\bibinitperiod},
+           given={Bob},
+           giveni={B\bibinitperiod},
+           givenun=2}}%
+        {{un=0,uniquepart=base,hash=b57a3caa79d7ce90b1057ca8c832a7e1}{%
+           family={Clark},
+           familyi={C\bibinitperiod},
+           given={Carol},
+           giveni={C\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{13f361235ba06de2f1f8c4f9781afd85}
+      \strng{fullhash}{1ee7fc84d775fb54f5d6014e3f5af6c1}
+      \strng{fullhashraw}{1ee7fc84d775fb54f5d6014e3f5af6c1}
+      \strng{bibnamehash}{13f361235ba06de2f1f8c4f9781afd85}
+      \strng{authorbibnamehash}{13f361235ba06de2f1f8c4f9781afd85}
+      \strng{authornamehash}{13f361235ba06de2f1f8c4f9781afd85}
+      \strng{authorfullhash}{1ee7fc84d775fb54f5d6014e3f5af6c1}
+      \strng{authorfullhashraw}{1ee7fc84d775fb54f5d6014e3f5af6c1}
+      \field{sortinit}{J}
+      \field{sortinithash}{b2f54a9081ace9966a7cb9413811edb4}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{J. Four}
+      \field{title}{Shared Start}
+      \field{year}{2019}
+      \field{dateera}{ce}
+    \endentry
+    \entry{b2}{article}{}{}
+      \name{author}{3}{ul=2}{%
+        {{un=0,uniquepart=base,hash=930625160640f7b8c94f327d731f3bad}{%
+           family={Jones},
+           familyi={J\bibinitperiod},
+           given={Alice},
+           giveni={A\bibinitperiod},
+           givenun=0}}%
+        {{un=2,uniquepart=given,hash=b2ea047fcd25381ecb231c2b3d0d8551}{%
+           family={Brown},
+           familyi={B\bibinitperiod},
+           given={Brian},
+           giveni={B\bibinitperiod},
+           givenun=2}}%
+        {{un=0,uniquepart=base,hash=b57a3caa79d7ce90b1057ca8c832a7e1}{%
+           family={Clark},
+           familyi={C\bibinitperiod},
+           given={Carol},
+           giveni={C\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{54c8bd5ebe56b38b86c7317a8cfb5841}
+      \strng{fullhash}{fc84ec7fd6c96ec794813275821b53f2}
+      \strng{fullhashraw}{fc84ec7fd6c96ec794813275821b53f2}
+      \strng{bibnamehash}{54c8bd5ebe56b38b86c7317a8cfb5841}
+      \strng{authorbibnamehash}{54c8bd5ebe56b38b86c7317a8cfb5841}
+      \strng{authornamehash}{54c8bd5ebe56b38b86c7317a8cfb5841}
+      \strng{authorfullhash}{fc84ec7fd6c96ec794813275821b53f2}
+      \strng{authorfullhashraw}{fc84ec7fd6c96ec794813275821b53f2}
+      \field{sortinit}{J}
+      \field{sortinithash}{b2f54a9081ace9966a7cb9413811edb4}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{J. Five}
+      \field{title}{Other Start}
+      \field{year}{2019}
+      \field{dateera}{ce}
+    \endentry
+    \entry{a2}{article}{}{}
+      \name{author}{1}{}{%
+        {{un=2,uniquepart=given,hash=055f6811649a97bc3a36ff4b2581f441}{%
+           family={Smith},
+           familyi={S\bibinitperiod},
+           given={Jane},
+           giveni={J\bibinitperiod},
+           givenun=2}}%
+      }
+      \strng{namehash}{055f6811649a97bc3a36ff4b2581f441}
+      \strng{fullhash}{055f6811649a97bc3a36ff4b2581f441}
+      \strng{fullhashraw}{055f6811649a97bc3a36ff4b2581f441}
+      \strng{bibnamehash}{055f6811649a97bc3a36ff4b2581f441}
+      \strng{authorbibnamehash}{055f6811649a97bc3a36ff4b2581f441}
+      \strng{authornamehash}{055f6811649a97bc3a36ff4b2581f441}
+      \strng{authorfullhash}{055f6811649a97bc3a36ff4b2581f441}
+      \strng{authorfullhashraw}{055f6811649a97bc3a36ff4b2581f441}
+      \field{sortinit}{S}
+      \field{sortinithash}{b164b07b29984b41daf1e85279fbc5ab}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{J. Two}
+      \field{title}{Second Study}
+      \field{year}{2020}
+      \field{dateera}{ce}
+    \endentry
+    \entry{a1}{article}{}{}
+      \name{author}{1}{}{%
+        {{un=2,uniquepart=given,hash=5d0ddda3a367ceb26fbaeca02e391c22}{%
+           family={Smith},
+           familyi={S\bibinitperiod},
+           given={John},
+           giveni={J\bibinitperiod},
+           givenun=2}}%
+      }
+      \strng{namehash}{5d0ddda3a367ceb26fbaeca02e391c22}
+      \strng{fullhash}{5d0ddda3a367ceb26fbaeca02e391c22}
+      \strng{fullhashraw}{5d0ddda3a367ceb26fbaeca02e391c22}
+      \strng{bibnamehash}{5d0ddda3a367ceb26fbaeca02e391c22}
+      \strng{authorbibnamehash}{5d0ddda3a367ceb26fbaeca02e391c22}
+      \strng{authornamehash}{5d0ddda3a367ceb26fbaeca02e391c22}
+      \strng{authorfullhash}{5d0ddda3a367ceb26fbaeca02e391c22}
+      \strng{authorfullhashraw}{5d0ddda3a367ceb26fbaeca02e391c22}
+      \field{sortinit}{S}
+      \field{sortinithash}{b164b07b29984b41daf1e85279fbc5ab}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{J. One}
+      \field{title}{First Study}
+      \field{year}{2020}
+      \field{dateera}{ce}
+    \endentry
+    \entry{a3}{article}{}{}
+      \name{author}{1}{}{%
+        {{un=1,uniquepart=given,hash=380f6af10ab88987b4793f70f5105365}{%
+           family={Smith},
+           familyi={S\bibinitperiod},
+           given={John\bibnamedelima A.},
+           giveni={J\bibinitperiod\bibinitdelim A\bibinitperiod},
+           givenun=1}}%
+      }
+      \strng{namehash}{380f6af10ab88987b4793f70f5105365}
+      \strng{fullhash}{380f6af10ab88987b4793f70f5105365}
+      \strng{fullhashraw}{380f6af10ab88987b4793f70f5105365}
+      \strng{bibnamehash}{380f6af10ab88987b4793f70f5105365}
+      \strng{authorbibnamehash}{380f6af10ab88987b4793f70f5105365}
+      \strng{authornamehash}{380f6af10ab88987b4793f70f5105365}
+      \strng{authorfullhash}{380f6af10ab88987b4793f70f5105365}
+      \strng{authorfullhashraw}{380f6af10ab88987b4793f70f5105365}
+      \field{sortinit}{S}
+      \field{sortinithash}{b164b07b29984b41daf1e85279fbc5ab}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{J. Three}
+      \field{title}{Third Study}
+      \field{year}{2020}
+      \field{dateera}{ce}
+    \endentry
+    \entry{d1}{book}{}{}
+      \name{editor}{1}{}{%
+        {{un=0,uniquepart=base,hash=52ca164b9ae891bd2337737ab7bee9af}{%
+           family={Vance},
+           familyi={V\bibinitperiod},
+           given={Jack},
+           giveni={J\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{publisher}{1}{%
+        {Press}%
+      }
+      \strng{namehash}{52ca164b9ae891bd2337737ab7bee9af}
+      \strng{fullhash}{52ca164b9ae891bd2337737ab7bee9af}
+      \strng{fullhashraw}{52ca164b9ae891bd2337737ab7bee9af}
+      \strng{bibnamehash}{52ca164b9ae891bd2337737ab7bee9af}
+      \strng{editorbibnamehash}{52ca164b9ae891bd2337737ab7bee9af}
+      \strng{editornamehash}{52ca164b9ae891bd2337737ab7bee9af}
+      \strng{editorfullhash}{52ca164b9ae891bd2337737ab7bee9af}
+      \strng{editorfullhashraw}{52ca164b9ae891bd2337737ab7bee9af}
+      \field{sortinit}{V}
+      \field{sortinithash}{afb52128e5b4dc4b843768c0113d673b}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{editor}
+      \field{labeltitlesource}{title}
+      \field{title}{Collected}
+      \field{year}{2015}
+      \field{dateera}{ce}
+    \endentry
+    \entry{d2}{book}{}{}
+      \name{editor}{2}{}{%
+        {{un=0,uniquepart=base,hash=52ca164b9ae891bd2337737ab7bee9af}{%
+           family={Vance},
+           familyi={V\bibinitperiod},
+           given={Jack},
+           giveni={J\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=fc9def3250d79c7f444d749ef96a04f0}{%
+           family={Wolfe},
+           familyi={W\bibinitperiod},
+           given={Gene},
+           giveni={G\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{publisher}{1}{%
+        {Press}%
+      }
+      \strng{namehash}{ef4b962bf477f7330b8ca32f3df671ee}
+      \strng{fullhash}{ef4b962bf477f7330b8ca32f3df671ee}
+      \strng{fullhashraw}{ef4b962bf477f7330b8ca32f3df671ee}
+      \strng{bibnamehash}{ef4b962bf477f7330b8ca32f3df671ee}
+      \strng{editorbibnamehash}{ef4b962bf477f7330b8ca32f3df671ee}
+      \strng{editornamehash}{ef4b962bf477f7330b8ca32f3df671ee}
+      \strng{editorfullhash}{ef4b962bf477f7330b8ca32f3df671ee}
+      \strng{editorfullhashraw}{ef4b962bf477f7330b8ca32f3df671ee}
+      \field{sortinit}{V}
+      \field{sortinithash}{afb52128e5b4dc4b843768c0113d673b}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{editor}
+      \field{labeltitlesource}{title}
+      \field{title}{More Collected}
+      \field{year}{2016}
+      \field{dateera}{ce}
+    \endentry
+    \entry{c2}{article}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=7bb2d83991df51fab82e334ba89d1132}{%
+           family={Wu},
+           familyi={W\bibinitperiod},
+           given={Wei},
+           giveni={W\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{fullhash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{fullhashraw}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{bibnamehash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{authorbibnamehash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{authornamehash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{authorfullhash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{authorfullhashraw}{7bb2d83991df51fab82e334ba89d1132}
+      \field{extraname}{1}
+      \field{sortinit}{W}
+      \field{sortinithash}{4315d78024d0cea9b57a0c6f0e35ed0d}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{J. Seven}
+      \field{title}{Same Title}
+      \field{year}{2017}
+      \field{dateera}{ce}
+    \endentry
+    \entry{c1}{article}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=7bb2d83991df51fab82e334ba89d1132}{%
+           family={Wu},
+           familyi={W\bibinitperiod},
+           given={Wei},
+           giveni={W\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{fullhash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{fullhashraw}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{bibnamehash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{authorbibnamehash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{authornamehash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{authorfullhash}{7bb2d83991df51fab82e334ba89d1132}
+      \strng{authorfullhashraw}{7bb2d83991df51fab82e334ba89d1132}
+      \field{extraname}{2}
+      \field{sortinit}{W}
+      \field{sortinithash}{4315d78024d0cea9b57a0c6f0e35ed0d}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{J. Six}
+      \field{title}{Same Title}
+      \field{year}{2018}
+      \field{dateera}{ce}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+
