@@ -67,11 +67,11 @@ fn initials(text: &str, period: &str) -> String {
     out
 }
 
-/// A stable hash for a name list.
+/// A stable hash for a name list, used to decide the dash.
 ///
-/// biblatex only ever compares these for equality, to decide whether to print a dash
-/// instead of a repeated author, so the values must be consistent rather than
-/// identical to biber's.
+/// biblatex prints a dash instead of a repeated author when the printed name list is the
+/// same as the previous entry's. Comparing the whole list is stricter than comparing
+/// biber's truncated `namehash`, and stricter is what the rendered pages agree with.
 fn name_hash(people: &[Person]) -> String {
     let mut canonical = String::new();
     for p in people {
@@ -85,6 +85,106 @@ fn name_hash(people: &[Person]) -> String {
         canonical.push(';');
     }
     format!("{:x}", md5::compute(canonical.as_bytes()))
+}
+
+/// biber's `normalise_string_hash`, before the digest.
+///
+/// `\LaTeX` becomes `LaTeX:`, `\"o` becomes `34:o`, and braces, ties, dots and spaces go:
+/// the point is that two spellings of the same name hash the same.
+pub fn normalise_for_hash(s: &str) -> String {
+    if s.is_empty() {
+        return String::new();
+    }
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\\' && i + 1 < chars.len() {
+            if chars[i + 1].is_alphabetic() {
+                let mut j = i + 1;
+                while j < chars.len() && chars[j].is_alphabetic() {
+                    j += 1;
+                }
+                out.extend(chars[i + 1..j].iter());
+                out.push(':');
+                i = j;
+            } else {
+                out.push_str(&format!("{}:", chars[i + 1] as u32));
+                i += 2;
+            }
+            while i < chars.len() && chars[i].is_whitespace() {
+                i += 1;
+            }
+            continue;
+        }
+        let c = chars[i];
+        if !matches!(c, '{' | '}' | '~' | '.') && !c.is_whitespace() {
+            out.push(c);
+        }
+        i += 1;
+    }
+    out
+}
+
+/// The initials of one name part, as biber hashes them under `hashscope="init"`.
+fn initials_of(s: &str) -> String {
+    s.split(|c: char| c.is_whitespace() || c == '-')
+        .filter_map(|word| word.chars().next())
+        .filter(|c| c.is_alphanumeric())
+        .collect()
+}
+
+pub fn part_of<'a>(p: &'a Person, part: &str) -> &'a str {
+    match part {
+        "family" => &p.name,
+        "given" => &p.given_name,
+        "prefix" => &p.prefix,
+        "suffix" => &p.suffix,
+        _ => "",
+    }
+}
+
+/// One name list hashed the way biber hashes it.
+///
+/// `visible` names are hashed, and a list longer than that gets a `+`: the same author
+/// followed by different co-authors then hashes differently, which is what makes the
+/// hash usable for disambiguation. `raw` drops the template and hashes every part as
+/// written.
+pub fn list_hash(
+    people: &[Person],
+    template: &[crate::bcf::HashPart],
+    visible: usize,
+    raw: bool,
+) -> String {
+    let canonical = hash_canonical(people, template, visible, raw);
+    format!("{:x}", md5::compute(canonical.as_bytes()))
+}
+
+/// The string biber digests: name parts concatenated, normalised, then NFC.
+pub fn hash_canonical(
+    people: &[Person],
+    template: &[crate::bcf::HashPart],
+    visible: usize,
+    raw: bool,
+) -> String {
+    let mut canonical = String::new();
+    let shown = visible.min(people.len());
+    for p in &people[..shown] {
+        for hp in template {
+            let value = if raw {
+                normalise_for_hash(part_of(p, &hp.part))
+            } else if hp.scope == "init" {
+                normalise_for_hash(&initials_of(part_of(p, &hp.part)))
+            } else {
+                normalise_for_hash(part_of(p, &hp.part))
+            };
+            canonical.push_str(&value);
+        }
+    }
+    if shown < people.len() {
+        canonical.push('+');
+    }
+    unicode_normalization::UnicodeNormalization::nfc(canonical.as_str()).collect::<String>()
 }
 
 /// biblatex's `extraname`: the position of an entry among those whose label name is the
@@ -1036,6 +1136,72 @@ pub fn write_bbl_full(
     typeset(&out)
 }
 
+/// biber's name hashes for every list of an entry, in the order it writes them.
+///
+/// There are eight per list and they are not one number: the cite count and the
+/// bibliography count each truncate the list with a `+`, `fullhash` takes every name and
+/// `fullhashraw` ignores the hash template. biblatex compares them to decide whether two
+/// names need initials, so a wrong value is an invisible wrong bibliography later.
+///
+/// Every list gets a role-prefixed group; the one the label is built from also gets the
+/// four unprefixed ones, in biber's own order.
+fn write_name_hashes(out: &mut String, ctl: &ControlFile, entry: &Effective, label: &str) {
+    let template = ctl.hash_template("global");
+    let opt = |name: &str, fallback: usize| {
+        ctl.option(name)
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(fallback)
+    };
+    let (max_cite, min_cite) = (opt("maxcitenames", 3), opt("mincitenames", 1));
+    let (max_bib, min_bib) = (opt("maxbibnames", 999), opt("minbibnames", 1));
+    let show = |count: usize, max: usize, min: usize| if count > max { min } else { count };
+
+    // The four values for one list, keyed as biber keys them: truncated bibliography
+    // first, then truncated citation, then the whole list twice.
+    let group = |field: &str, people: &[Person]| {
+        let h = |visible: usize, raw: bool| list_hash(people, &template, visible, raw);
+        [
+            (
+                format!("{field}bibnamehash"),
+                h(show(people.len(), max_bib, min_bib), false),
+            ),
+            (
+                format!("{field}namehash"),
+                h(show(people.len(), max_cite, min_cite), false),
+            ),
+            (format!("{field}fullhash"), h(people.len(), false)),
+            (format!("{field}fullhashraw"), h(people.len(), true)),
+        ]
+    };
+
+    let mut lists: Vec<(&str, [(String, String); 4])> = entry
+        .names
+        .iter()
+        .map(|(field, people)| (field.as_str(), group(field, people)))
+        .collect();
+    lists.sort_by(|a, b| a.0.cmp(b.0));
+
+    let emit = |out: &mut String, (key, value): &(String, String)| {
+        out.push_str(&format!("      \\strng{{{key}}}{{{value}}}\n"));
+    };
+
+    if let Some((field, hashes)) = lists.iter().find(|(field, _)| *field == label) {
+        for suffix in ["namehash", "fullhash", "fullhashraw", "bibnamehash"] {
+            if let Some((_, value)) = hashes
+                .iter()
+                .find(|(k, _)| k.strip_prefix(*field) == Some(suffix))
+            {
+                emit(out, &(suffix.to_string(), value.clone()));
+            }
+        }
+    }
+    for (_, hashes) in &lists {
+        for pair in hashes {
+            emit(out, pair);
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn write_entry(
     out: &mut String,
@@ -1075,6 +1241,12 @@ fn write_entry(
     }
 
     let year = entry_year(entry);
+    let entry_options = entry
+        .values
+        .iter()
+        .find(|(k, _)| k == "options")
+        .map(|(_, v)| v.to_lowercase())
+        .unwrap_or_default();
     let mut label_source = String::new();
     for (field_name, people) in &entry.names {
         let ul = if label_source.is_empty() {
@@ -1086,27 +1258,20 @@ fn write_entry(
         if label_source.is_empty()
             && matches!(field_name.as_str(), "author" | "editor" | "translator")
         {
-            label_source = field_name.clone();
+            // `options = {useeditor=false}` removes the editor from the label: Britannica
+            // labels under its title, and biber writes no `namehash` for it.
+            let used = match field_name.as_str() {
+                "author" | "editor" => !option_off(&entry_options, &format!("use{field_name}")),
+                "translator" => option_on(&entry_options, "usetranslator"),
+                _ => true,
+            };
+            if used {
+                label_source = field_name.clone();
+            }
         }
     }
 
-    // The dash for a repeated author is decided by comparing these with the previous
-    // entry's, so identical people must produce identical hashes.
-    if let Some((_, people)) = entry.names.iter().find(|(f, _)| *f == label_source) {
-        let hash = name_hash(people);
-        for key in [
-            "namehash",
-            "fullhash",
-            "fullhashraw",
-            "bibnamehash",
-            "authorbibnamehash",
-            "authornamehash",
-            "authorfullhash",
-            "authorfullhashraw",
-        ] {
-            out.push_str(&format!("      \\strng{{{key}}}{{{hash}}}\n"));
-        }
-    }
+    write_name_hashes(out, ctl, entry, &label_source);
 
     let sortinit = ranks_init
         .get(entry.key.as_str())

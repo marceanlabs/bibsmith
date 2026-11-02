@@ -70,12 +70,51 @@ pub struct ControlFile {
     /// This is the one that decides how the `.bbl` writes a value, and it is not the
     /// same as the datatype: `location` is `fieldtype="list" datatype="literal"`.
     pub fieldkinds: std::collections::HashMap<String, String>,
+    /// `<bcf:namehashtemplate>` blocks, by name: the name parts hashed and in what form.
+    ///
+    /// biber hashes a name list by concatenating the parts this template names, so the
+    /// value of `\strng{namehash}` depends on it. The style ships one called `global`,
+    /// and a document can pick another per entry or per name list.
+    pub hash_templates: std::collections::HashMap<String, Vec<HashPart>>,
+}
+
+/// One `<bcf:namepart>` inside a name-hash template.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HashPart {
+    /// `family`, `given`, `prefix` or `suffix`.
+    pub part: String,
+    /// `full` hashes the whole part, `init` only its initials.
+    pub scope: String,
 }
 
 impl ControlFile {
     /// One effective option, e.g. `uniquelist`.
     pub fn option(&self, name: &str) -> Option<&str> {
         self.options.get(name).map(|s| s.as_str())
+    }
+
+    /// The name-hash template called `name`, or `global`, or biber's own default.
+    ///
+    /// A document can rename the template; when the file carries none at all the default
+    /// is what biblatex ships: every part, whole.
+    pub fn hash_template(&self, name: &str) -> Vec<HashPart> {
+        if let Some(t) = self.hash_templates.get(name) {
+            if !t.is_empty() {
+                return t.clone();
+            }
+        }
+        if let Some(t) = self.hash_templates.get("global") {
+            if !t.is_empty() {
+                return t.clone();
+            }
+        }
+        ["family", "given", "prefix", "suffix"]
+            .iter()
+            .map(|p| HashPart {
+                part: (*p).to_string(),
+                scope: "full".to_string(),
+            })
+            .collect()
     }
 
     pub fn parse(xml: &str) -> Result<Self, String> {
@@ -98,6 +137,9 @@ impl ControlFile {
         let mut last_field_dtype: Option<String> = None;
         let mut last_field_kind: Option<String> = None;
         let mut current_sort: Option<SortGroup> = None;
+        // Where we are inside a <bcf:namehashtemplate>.
+        let mut hash_name: Option<String> = None;
+        let mut hash_part: Option<HashPart> = None;
 
         loop {
             match reader.read_event() {
@@ -136,6 +178,17 @@ impl ControlFile {
                         "sortingtemplate" => {
                             in_template = true;
                             template_name = attr("name").unwrap_or_default();
+                        }
+                        "namehashtemplate" => {
+                            let name = attr("name").unwrap_or_default();
+                            ctl.hash_templates.entry(name.clone()).or_default();
+                            hash_name = Some(name);
+                        }
+                        "namepart" if hash_name.is_some() => {
+                            hash_part = Some(HashPart {
+                                part: String::new(),
+                                scope: attr("hashscope").unwrap_or_else(|| "full".to_string()),
+                            });
                         }
                         "sort" if in_template => {
                             in_sort = true;
@@ -185,6 +238,18 @@ impl ControlFile {
                                 ctl.sorting_template = template_name.clone();
                             }
                         }
+                        "namepart" if hash_name.is_some() => {
+                            if let (Some(name), Some(part)) = (hash_name.as_ref(), hash_part.take())
+                            {
+                                if !part.part.is_empty() {
+                                    ctl.hash_templates
+                                        .entry(name.clone())
+                                        .or_default()
+                                        .push(part);
+                                }
+                            }
+                        }
+                        "namehashtemplate" => hash_name = None,
                         "sort" if in_sort => {
                             in_sort = false;
                             if let Some(group) = current_sort.take() {
@@ -230,6 +295,11 @@ impl ControlFile {
                             }
                         }
                         "presort" => ctl.presort = text,
+                        "namepart" if hash_part.is_some() => {
+                            if let Some(part) = hash_part.as_mut() {
+                                part.part = text;
+                            }
+                        }
                         "sortitem" if in_sort => {
                             if let Some(group) = current_sort.as_mut() {
                                 match group.items.last_mut() {

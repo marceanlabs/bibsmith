@@ -28,6 +28,8 @@ written, each verified by `scripts/check-pdf.sh`.
 2. **`uniquename`, `uniquelist`, `uniquetitle`.** biber decides these across the whole
    bibliography and writes `\field{extraname}`, `\field{uniquelist}`, `\field{uniquetitle}`.
    One to two weeks, and it forces the refinement below.
+   *The name hashes it needs are done (2 Nov 2026): all 102 entries match biber's
+   `\strng` values, which was the blocker.*
 3. **The rest of the `.bbl` fields** biber writes and we skip: `\true{nocite}`,
    `\field{range}`, `\field{labelnumber}` for set members, `\field{origfields}`,
    `\field{ids}`. Two to three days; each one is a line in the writer once measured.

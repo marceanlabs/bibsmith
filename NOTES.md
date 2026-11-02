@@ -211,3 +211,33 @@ whatever decides them is the same unexplained tie-break.
 Until that is settled, `oracle/style-nyvt.tex` stays a known difference rather than a
 passing test. Nothing else depends on it: `nyt`, `nty` and `anyt` are identical to biber on
 every entry.
+
+## Name hashes, 2 November 2026
+
+The `.bbl` carries eight name hashes per name list, and bibsmith wrote one value eight
+times. biblatex compares them when it decides whether two names need initials, so the
+single value was the thing standing between `uniquename` and this writer.
+
+What biber actually does, read from its source and then measured:
+
+- `namehash` hashes the names a citation shows, with `+` for a truncated list.
+- `bibnamehash` is the same for the bibliography's name count.
+- `fullhash` hashes every name, and `fullhashraw` every name without the hash template.
+- The template is in the `.bcf` (`hashscope="full"` or `init` per name part), and the
+  counts come from the style's `maxcitenames`/`maxbibnames`, which here are 3 and 1.
+- Every name list gets a role-prefixed group (`author…`, `editor…`), not just the label
+  list, and the parts are hashed in the data model's order.
+
+The digest is md5 over the concatenated parts after `normalise_string_hash` (TeX macros
+become `name:`, accent macros become `34:`, braces and spaces go) and NFC.
+
+Measured: all 102 entries and every one of their hashes match biber byte for byte, in the
+same order. `tests/name_hashes.rs` asserts that against `oracle/nyt.bbl.biber`, and the
+four typeset documents still match biber's pages.
+
+One correction fell out of it: `options = {useeditor=false}` (Britannica) means the editor
+is not a label name at all, so biber writes no `namehash` for that entry. The label list is
+now chosen with the same `use*` rules the sort key already used.
+
+Not yet modelled: `uniquelist` raises the visible count, and a per-entry or per-name-list
+`namehashtemplate` is not read, only `global`.

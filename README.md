@@ -61,6 +61,7 @@ Every number below is a test in this repository, not a claim.
 | `biber --tool` field parity, two corpora | no field biber writes is missing |
 | Sorting, 92 entries, `nyt` / `nty` / `ynt` / `nyvt` / `ydnt` | 92 of 92 positions |
 | Fuzzing | 1.08M bibliography and 1.17M control-file cases, no crash |
+| Name hashes, 102 entries | every `\strng` value and position matches biber |
 | Speed, 1,020 entries | 0.01 s and 16 MB, against biber's 9.62 s and 253 MB |
 
 The corpora are `biblatex-examples.bib` from CTAN (100 `@` blocks, every awkward case the
